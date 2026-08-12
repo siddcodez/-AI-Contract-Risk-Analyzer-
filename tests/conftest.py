@@ -7,6 +7,7 @@ decorator needed per test.
 
 import os
 from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -36,6 +37,26 @@ os.environ.setdefault("APP_VERSION", "0.1.0")
 os.environ.setdefault("JWT_ALGORITHM", "HS256")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 os.environ.setdefault("REFRESH_TOKEN_EXPIRE_DAYS", "7")
+
+
+@pytest.fixture(autouse=True)
+def mock_get_db() -> AsyncGenerator[AsyncMock, None]:
+    """Override get_db FastAPI dependency for all unit tests.
+
+    Prevents endpoints from attempting to connect to a real database
+    during unit tests where lifespan startup is not executed.
+    """
+    from app.db.session import get_db
+    from app.main import app
+
+    mock_session = AsyncMock()
+
+    async def _override_get_db() -> AsyncGenerator[AsyncMock, None]:
+        yield mock_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    yield mock_session
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.fixture

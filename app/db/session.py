@@ -106,3 +106,19 @@ async def check_db_connection() -> bool:
     except Exception as exc:
         logger.warning("Database health check failed", exc_info=exc)
         return False
+
+
+async def set_tenant_context(session: AsyncSession, org_id: str) -> None:
+    """Set the RLS tenant context for the current transaction.
+
+    Uses PostgreSQL's set_config() with a parameterised query to
+    prevent SQL injection.  The third argument (true) makes the
+    setting local to the current transaction — it resets automatically
+    when the transaction commits or rolls back.
+
+    Must be called within a transaction (get_db dependency guarantees this).
+    """
+    await session.execute(
+        text("SELECT set_config('app.current_org_id', :org_id, true)"),
+        {"org_id": org_id},
+    )

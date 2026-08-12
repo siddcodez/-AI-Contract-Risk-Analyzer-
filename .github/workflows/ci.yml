@@ -110,7 +110,8 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql+asyncpg://contract_user:contract_pass@localhost:5432/contract_risk_db
+      DATABASE_URL: postgresql+asyncpg://app_user:app_pass@localhost:5432/contract_risk_db
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://contract_user:contract_pass@localhost:5432/contract_risk_db
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
@@ -121,7 +122,7 @@ jobs:
       MINIO_BUCKET_NAME: contract-documents
       MINIO_USE_SSL: "False"
 
-      SECRET_KEY: ci-test-secret-key-not-for-production
+      SECRET_KEY: ci-test-secret-key-not-for-production-x
       ENVIRONMENT: development
       LOG_LEVEL: DEBUG
       APP_VERSION: "0.1.0"
@@ -140,6 +141,26 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
+
+      - name: Create app_user database role
+        run: |
+          PGPASSWORD=contract_pass psql -h localhost -U contract_user -d contract_risk_db <<'SQL'
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_user') THEN
+                CREATE ROLE app_user WITH LOGIN PASSWORD 'app_pass' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+            END
+            $$;
+            GRANT CONNECT ON DATABASE contract_risk_db TO app_user;
+            GRANT USAGE ON SCHEMA public TO app_user;
+            ALTER DEFAULT PRIVILEGES FOR ROLE contract_user IN SCHEMA public
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
+            ALTER DEFAULT PRIVILEGES FOR ROLE contract_user IN SCHEMA public
+              GRANT USAGE, SELECT ON SEQUENCES TO app_user;
+            ALTER DEFAULT PRIVILEGES FOR ROLE contract_user IN SCHEMA public
+              GRANT EXECUTE ON FUNCTIONS TO app_user;
+          SQL
 
       - name: Run Alembic migrations
         run: alembic upgrade head

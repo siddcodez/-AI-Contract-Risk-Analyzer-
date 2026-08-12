@@ -34,6 +34,10 @@ dependencies = [
 
     # HTTP client (health checks + LLM calls later)
     "httpx>=0.27.0",
+
+    # Auth
+    "bcrypt>=4.0.0",
+    "PyJWT>=2.9.0",
 ]
 
 [project.optional-dependencies]
@@ -92,13 +96,16 @@ ignore_missing_imports = false
 exclude = ["alembic/"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "asyncpg.*", "aiobotocore.*", "boto3.*", "botocore.*", "redis.*"]
+module = ["celery.*", "asyncpg.*", "aiobotocore.*", "boto3.*", "botocore.*", "redis.*", "jwt.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=65"
+markers = [
+    "integration: tests that require real backing services (PostgreSQL, Redis, etc.)",
+]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",

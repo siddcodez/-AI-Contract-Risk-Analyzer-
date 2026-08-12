@@ -1,13 +1,16 @@
 """Alembic environment configuration.
 
-Reads the DATABASE_URL from app.core.config (which reads from environment
-variables / .env) so secrets never appear in alembic.ini or version control.
+Reads the database URL from MIGRATION_DATABASE_URL (preferred) or
+DATABASE_URL (fallback).  The migration URL should point to a role
+with elevated privileges (e.g. contract_user) that can create tables,
+types, functions, and RLS policies.
 
 Uses SQLAlchemy 2.0 async engine with run_sync to keep migration code
 compatible with the async driver (asyncpg).
 """
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -16,10 +19,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # Import Base so Alembic can discover all models via metadata.
-# As models are added in later milestones, ensure they are imported
-# somewhere that Base.metadata knows about them — the easiest way is
-# to import them in app/models/__init__.py.
 from app.db.base import Base
+
+# Import all models so Base.metadata is populated before autogenerate runs.
+import app.models  # noqa: F401 — side-effect import for model registration
+
 from app.core.config import get_settings
 
 # Alembic Config object — gives access to the alembic.ini values
@@ -34,6 +38,14 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
+    """Return the migration database URL.
+
+    Prefers MIGRATION_DATABASE_URL (elevated privileges for schema changes)
+    and falls back to DATABASE_URL (app runtime connection).
+    """
+    migration_url = os.environ.get("MIGRATION_DATABASE_URL")
+    if migration_url:
+        return migration_url
     return get_settings().DATABASE_URL
 
 
