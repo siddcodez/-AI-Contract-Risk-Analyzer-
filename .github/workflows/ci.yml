@@ -10,12 +10,15 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+
   # ---------------------------------------------------------------------------
   # Job 1: Lint & Format
   # ---------------------------------------------------------------------------
+
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,12 +36,15 @@ jobs:
       - name: Ruff — format check
         run: ruff format --check app tests scripts
 
+
   # ---------------------------------------------------------------------------
   # Job 2: Type Check
   # ---------------------------------------------------------------------------
+
   typecheck:
     name: Type Check (mypy --strict)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -53,14 +59,17 @@ jobs:
       - name: mypy
         run: mypy --strict app/
 
+
   # ---------------------------------------------------------------------------
   # Job 3: Test Suite
   # ---------------------------------------------------------------------------
+
   test:
     name: Tests (pytest)
     runs-on: ubuntu-latest
 
     services:
+
       postgres:
         image: pgvector/pgvector:pg16
         env:
@@ -90,9 +99,10 @@ jobs:
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
+        command: server /data --console-address ":9001"
         ports:
           - 9000:9000
-        # MinIO needs the server command; we use a workaround with options
+          - 9001:9001
         options: >-
           --health-cmd "curl -f http://localhost:9000/minio/health/live"
           --health-interval 10s
@@ -104,15 +114,18 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
+
       MINIO_ENDPOINT: http://localhost:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET_NAME: contract-documents
       MINIO_USE_SSL: "False"
+
       SECRET_KEY: ci-test-secret-key-not-for-production
       ENVIRONMENT: development
       LOG_LEVEL: DEBUG
       APP_VERSION: "0.1.0"
+
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: "30"
       REFRESH_TOKEN_EXPIRE_DAYS: "7"
