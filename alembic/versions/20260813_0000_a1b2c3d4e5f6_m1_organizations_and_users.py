@@ -15,6 +15,7 @@ Creates:
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -27,7 +28,7 @@ depends_on = None
 def upgrade() -> None:
     # --- Enum type -----------------------------------------------------------
     user_role = sa.Enum("admin", "reviewer", "viewer", name="user_role")
-    user_role.create(op.get_bind(), checkfirst=False)
+    user_role.create(op.get_bind(), checkfirst=True)
 
     # --- organizations -------------------------------------------------------
     op.create_table(
@@ -65,7 +66,7 @@ def upgrade() -> None:
         sa.Column("full_name", sa.String(255), nullable=False),
         sa.Column(
             "role",
-            sa.Enum(
+            postgresql.ENUM(
                 "admin",
                 "reviewer",
                 "viewer",
@@ -183,4 +184,4 @@ def downgrade() -> None:
     op.drop_table("organizations")
 
     user_role = sa.Enum(name="user_role")
-    user_role.drop(op.get_bind(), checkfirst=False)
+    user_role.drop(op.get_bind(), checkfirst=True)

@@ -9,7 +9,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
+from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -46,12 +47,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(1024))
     full_name: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(
-        Enum(
+        PG_ENUM(
             UserRole,
             name="user_role",
-            create_constraint=False,
-            native_enum=True,
             create_type=False,
+            values_callable=lambda x: [e.value for e in x],
         ),
         default=UserRole.viewer,
     )

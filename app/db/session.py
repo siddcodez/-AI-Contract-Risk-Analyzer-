@@ -120,5 +120,5 @@ async def set_tenant_context(session: AsyncSession, org_id: str) -> None:
     """
     await session.execute(
         text("SELECT set_config('app.current_org_id', :org_id, true)"),
-        {"org_id": org_id},
+        {"org_id": str(org_id)},
     )
