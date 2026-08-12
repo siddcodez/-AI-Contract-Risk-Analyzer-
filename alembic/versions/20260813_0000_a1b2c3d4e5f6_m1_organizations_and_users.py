@@ -27,7 +27,7 @@ depends_on = None
 def upgrade() -> None:
     # --- Enum type -----------------------------------------------------------
     user_role = sa.Enum("admin", "reviewer", "viewer", name="user_role")
-    user_role.create(op.get_bind(), checkfirst=True)
+    user_role.create(op.get_bind(), checkfirst=False)
 
     # --- organizations -------------------------------------------------------
     op.create_table(
@@ -182,4 +182,5 @@ def downgrade() -> None:
     op.drop_table("users")
     op.drop_table("organizations")
 
-    op.execute("DROP TYPE IF EXISTS user_role")
+    user_role = sa.Enum(name="user_role")
+    user_role.drop(op.get_bind(), checkfirst=False)

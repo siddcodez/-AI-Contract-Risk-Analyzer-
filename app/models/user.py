@@ -46,7 +46,13 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(1024))
     full_name: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", create_constraint=False, native_enum=True),
+        Enum(
+            UserRole,
+            name="user_role",
+            create_constraint=False,
+            native_enum=True,
+            create_type=False,
+        ),
         default=UserRole.viewer,
     )
     org_id: Mapped[uuid.UUID] = mapped_column(
