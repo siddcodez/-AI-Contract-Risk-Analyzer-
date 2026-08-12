@@ -1,4 +1,3 @@
-
 """Unit tests for app.core modules (config, logging, exceptions)."""
 
 import logging
