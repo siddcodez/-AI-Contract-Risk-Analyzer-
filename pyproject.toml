@@ -41,7 +41,7 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
-    "ruff>=0.7.0",
+    "ruff==0.16.2",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
     # Type stubs
@@ -57,6 +57,9 @@ dev = [
 target-version = "py312"
 line-length = 100
 src = ["app", "tests", "scripts"]
+
+[tool.ruff.format]
+line-ending = "lf"
 
 [tool.ruff.lint]
 select = [
