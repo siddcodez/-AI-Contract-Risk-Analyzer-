@@ -1,0 +1,36 @@
+repos:
+  # Ruff — linting and formatting (replaces flake8, isort, black)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Mypy — static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: [--strict]
+        additional_dependencies:
+          - pydantic>=2.9.0
+          - pydantic-settings>=2.6.0
+          - sqlalchemy[asyncio]>=2.0.36
+          - types-boto3>=1.35.0
+          - boto3-stubs[s3]>=1.35.0
+
+  # General hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      # Guard against accidentally committing .env files with real secrets
+      - id: detect-private-key
+      - id: check-case-conflict

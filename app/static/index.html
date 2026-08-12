@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Contract Risk Analyzer — Upload legal contracts and get instant AI-powered risk scoring, clause classification, redline recommendations, and export reports." />
+  <meta name="theme-color" content="#080C14" />
+  <title>ContractRisk AI — Smart Legal Risk Analysis</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ================================================================
+       TOP NAVIGATION BAR
+       ================================================================ -->
+  <header class="topbar" role="banner">
+    <div class="topbar-brand">
+      <div class="topbar-logo" aria-hidden="true">⚖️</div>
+      <span class="topbar-title">ContractRisk AI</span>
+      <span class="topbar-subtitle">M1 · AI-Powered Analysis</span>
+    </div>
+
+    <!-- Center: Playbook & Sensitivity quick-access -->
+    <div class="topbar-center" role="group" aria-label="Analysis settings">
+      <div class="topbar-setting" title="Active playbook">
+        <span class="topbar-setting-icon" aria-hidden="true">📋</span>
+        <span id="topbar-playbook-label" class="topbar-setting-value">Standard</span>
+      </div>
+      <div class="sensitivity-toggle" role="group" aria-label="Risk sensitivity">
+        <button class="sens-btn active" data-sensitivity="strict" id="sens-strict" title="Strict: maximum risk detection">Strict</button>
+        <button class="sens-btn active" data-sensitivity="standard" id="sens-standard" title="Standard: balanced detection">Standard</button>
+        <button class="sens-btn" data-sensitivity="permissive" id="sens-permissive" title="Permissive: essential risks only">Permissive</button>
+      </div>
+    </div>
+
+    <!-- Right: Actions + Status -->
+    <div class="topbar-right">
+      <button class="topbar-action-btn" id="btn-playbook-rules" title="Configure playbook rules" aria-label="Open playbook rules">
+        <span aria-hidden="true">⚙️</span> Playbook
+      </button>
+      <button class="topbar-action-btn" id="btn-export" title="Export report" disabled aria-label="Export analysis report">
+        <span aria-hidden="true">📤</span> Export
+      </button>
+
+      <!-- Live backend health status -->
+      <nav class="topbar-status" aria-label="Service status">
+        <div id="pill-db" class="status-pill loading" title="PostgreSQL Database">
+          <span class="dot"></span>
+          <span>DB</span>
+        </div>
+        <div id="pill-redis" class="status-pill loading" title="Redis Broker">
+          <span class="dot"></span>
+          <span>Redis</span>
+        </div>
+        <div id="pill-storage" class="status-pill loading" title="MinIO Object Storage">
+          <span class="dot"></span>
+          <span>Storage</span>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       MAIN CONTENT — Three-column layout
+       ================================================================ -->
+  <main class="main-content" role="main">
+
+    <!-- ============================================================
+         LEFT PANEL — Upload & Controls
+         ============================================================ -->
+    <aside class="left-panel" aria-label="Contract upload and controls">
+
+      <!-- Upload Zone -->
+      <div
+        id="upload-zone"
+        class="upload-zone"
+        role="button"
+        tabindex="0"
+        aria-label="Upload contract file — PDF, DOCX, or TXT"
+        title="Click or drag & drop a contract file"
+      >
+        <div class="upload-inner">
+          <span class="upload-icon" aria-hidden="true">📄</span>
+          <div class="upload-title">Drop your contract here</div>
+          <div class="upload-sub">or click to browse files</div>
+          <div class="upload-types">
+            <span class="type-badge">PDF</span>
+            <span class="type-badge">DOCX</span>
+            <span class="type-badge">TXT</span>
+          </div>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.docx,.txt" aria-hidden="true" />
+      </div>
+
+      <!-- Progress Bar -->
+      <div id="progress-container" class="progress-container" role="status" aria-live="polite">
+        <div class="progress-label">
+          <span id="progress-label">Initializing…</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="progress-step-detail" class="progress-step-detail"></div>
+      </div>
+
+      <!-- Playbook Selector -->
+      <div class="left-section">
+        <div class="section-label">Playbook</div>
+        <div class="select-wrapper">
+          <select id="playbook-select" class="styled-select" aria-label="Select analysis playbook">
+            <option value="standard">⚖️ Standard Risk Playbook</option>
+            <option value="nda">🤫 NDA Playbook</option>
+            <option value="vendor">📦 Vendor Agreement</option>
+            <option value="employment">👤 Employment Playbook</option>
+            <option value="saas">☁️ SaaS / MSA Playbook</option>
+          </select>
+          <span class="select-arrow" aria-hidden="true">▼</span>
+        </div>
+      </div>
+
+      <!-- Analyze Button -->
+      <button
+        id="btn-analyze"
+        class="btn-analyze"
+        disabled
+        aria-label="Start contract analysis"
+      >
+        <span class="btn-analyze-icon" aria-hidden="true">🔍</span>
+        <span class="btn-analyze-text">Analyze Contract</span>
+      </button>
+
+      <!-- Sample Contracts -->
+      <div class="left-section">
+        <div class="section-label">Try a Sample Contract</div>
+        <div class="sample-contracts">
+          <button
+            class="sample-contract-btn"
+            data-contract="nda"
+            id="sample-nda"
+            aria-label="Load sample Mutual NDA Agreement"
+          >
+            <span class="sample-icon" aria-hidden="true">🤝</span>
+            <span class="sample-info">
+              <span class="sample-name">Mutual NDA</span>
+              <span class="sample-desc">8 pages · 7 clauses · Score: 72</span>
+            </span>
+            <span class="sample-arrow">→</span>
+          </button>
+          <button
+            class="sample-contract-btn"
+            data-contract="vendor"
+            id="sample-vendor"
+            aria-label="Load sample Software Vendor Agreement"
+          >
+            <span class="sample-icon" aria-hidden="true">💼</span>
+            <span class="sample-info">
+              <span class="sample-name">Vendor Agreement</span>
+              <span class="sample-desc">22 pages · 5 clauses · Score: 45</span>
+            </span>
+            <span class="sample-arrow">→</span>
+          </button>
+          <button
+            class="sample-contract-btn"
+            data-contract="employment"
+            id="sample-employment"
+            aria-label="Load sample Executive Employment Contract"
+          >
+            <span class="sample-icon" aria-hidden="true">👤</span>
+            <span class="sample-info">
+              <span class="sample-name">Employment Contract</span>
+              <span class="sample-desc">14 pages · 4 clauses · Score: 61</span>
+            </span>
+            <span class="sample-arrow">→</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats panel (visible after analysis) -->
+      <div id="left-stats" class="left-stats" style="display:none;" aria-label="Quick stats">
+        <div class="left-stats-title">Analysis Summary</div>
+        <div class="left-stats-grid">
+          <div class="left-stat-item" title="Critical risk clauses">
+            <span id="ls-critical" class="ls-count critical">0</span>
+            <span class="ls-label">Critical</span>
+          </div>
+          <div class="left-stat-item" title="High risk clauses">
+            <span id="ls-high" class="ls-count high">0</span>
+            <span class="ls-label">High</span>
+          </div>
+          <div class="left-stat-item" title="Medium risk clauses">
+            <span id="ls-medium" class="ls-count medium">0</span>
+            <span class="ls-label">Medium</span>
+          </div>
+          <div class="left-stat-item" title="Safe clauses">
+            <span id="ls-safe" class="ls-count safe">0</span>
+            <span class="ls-label">Safe</span>
+          </div>
+        </div>
+        <button id="btn-clear" class="btn-clear" aria-label="Clear analysis and upload new contract">
+          ↺ New Analysis
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ============================================================
+         CENTER PANEL — Analysis Results
+         ============================================================ -->
+    <section class="center-panel" aria-label="Contract analysis results">
+
+      <!-- Empty State (shown initially) -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-orb" aria-hidden="true"></div>
+        <span class="empty-glyph" aria-hidden="true">⚖️</span>
+        <h1 class="empty-title">Ready to Analyze</h1>
+        <p class="empty-sub">
+          Upload a legal contract or select a sample from the left panel.
+          Our AI engine classifies every clause, flags risks, and suggests
+          redlines — in seconds.
+        </p>
+        <div class="empty-features" aria-label="Key features">
+          <div class="empty-feature"><span>🎯</span> 12 Clause Types</div>
+          <div class="empty-feature"><span>⚡</span> Instant Analysis</div>
+          <div class="empty-feature"><span>✏️</span> AI Redlines</div>
+          <div class="empty-feature"><span>📤</span> Export Reports</div>
+        </div>
+      </div>
+
+      <!-- Analysis View (shown after analysis) -->
+      <div id="analysis-view" class="analysis-view" aria-label="Analysis results" aria-live="polite">
+
+        <!-- Risk Overview -->
+        <div class="risk-overview animate-in">
+          <div class="risk-gauge-wrap" aria-label="Risk score gauge">
+            <div class="risk-gauge" role="img" aria-labelledby="gauge-number gauge-label">
+              <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="risk-gauge-track" cx="60" cy="60" r="48.9" />
+                <circle
+                  id="gauge-fill"
+                  class="risk-gauge-fill"
+                  cx="60" cy="60" r="48.9"
+                  stroke="#00F2FE"
+                />
+              </svg>
+              <div class="risk-gauge-number">
+                <span id="gauge-number">--</span>
+              </div>
+            </div>
+            <span id="gauge-label" class="risk-gauge-label">--</span>
+          </div>
+
+          <div class="risk-meta">
+            <div id="contract-name" class="contract-name">Contract Name</div>
+            <div id="contract-info" class="contract-info">Loading details…</div>
+
+            <div class="risk-stats" role="list" aria-label="Clause counts by severity">
+              <div class="risk-stat critical" role="listitem" title="Critical risk clauses">
+                <span id="stat-critical" class="stat-count">0</span>
+                <span class="stat-label">Critical</span>
+              </div>
+              <div class="risk-stat high" role="listitem" title="High risk clauses">
+                <span id="stat-high" class="stat-count">0</span>
+                <span class="stat-label">High</span>
+              </div>
+              <div class="risk-stat medium" role="listitem" title="Medium risk clauses">
+                <span id="stat-medium" class="stat-count">0</span>
+                <span class="stat-label">Medium</span>
+              </div>
+              <div class="risk-stat safe" role="listitem" title="Safe clauses">
+                <span id="stat-safe" class="stat-count">0</span>
+                <span class="stat-label">Safe</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Risk Matrix Mini Preview -->
+          <div id="risk-matrix-mini" class="risk-matrix-mini" aria-label="Risk distribution chart" aria-hidden="true">
+            <div class="matrix-title">Risk Distribution</div>
+            <div class="matrix-bars" id="matrix-bars"></div>
+          </div>
+        </div>
+
+        <!-- View Switcher + Search Toolbar -->
+        <div class="clause-toolbar" role="toolbar" aria-label="Clause filter and view controls">
+          <!-- Filter buttons -->
+          <div class="filter-group" role="group" aria-label="Filter by severity">
+            <button class="filter-btn active" data-filter="all" id="filter-all" aria-pressed="true">All</button>
+            <button class="filter-btn" data-filter="critical" id="filter-critical" aria-pressed="false">
+              <span class="sev-dot critical"></span>Critical
+            </button>
+            <button class="filter-btn" data-filter="high" id="filter-high" aria-pressed="false">
+              <span class="sev-dot high"></span>High
+            </button>
+            <button class="filter-btn" data-filter="medium" id="filter-medium" aria-pressed="false">
+              <span class="sev-dot medium"></span>Medium
+            </button>
+            <button class="filter-btn" data-filter="safe" id="filter-safe" aria-pressed="false">
+              <span class="sev-dot safe"></span>Safe
+            </button>
+          </div>
+
+          <!-- Search -->
+          <div class="search-wrap">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              id="clause-search"
+              class="clause-search-input"
+              placeholder="Search clauses…"
+              aria-label="Search clauses by keyword"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- View Mode -->
+          <div class="view-switcher" role="group" aria-label="Switch view mode">
+            <button class="view-btn active" data-view="cards" id="view-cards" title="Clause cards view" aria-pressed="true">
+              <span aria-hidden="true">▤</span> Cards
+            </button>
+            <button class="view-btn" data-view="document" id="view-document" title="Full document view" aria-pressed="false">
+              <span aria-hidden="true">📄</span> Document
+            </button>
+            <button class="view-btn" data-view="matrix" id="view-matrix" title="Risk matrix view" aria-pressed="false">
+              <span aria-hidden="true">📊</span> Matrix
+            </button>
+          </div>
+
+          <span id="clause-count" class="clause-count" aria-live="polite"></span>
+        </div>
+
+        <!-- CARDS VIEW -->
+        <div
+          id="clause-list"
+          class="clause-list"
+          role="list"
+          aria-label="Identified clauses"
+        ></div>
+
+        <!-- DOCUMENT VIEW -->
+        <div id="document-view" class="document-view" style="display:none;" aria-label="Full contract document with highlighted clauses">
+          <div class="doc-header">
+            <span class="doc-header-icon" aria-hidden="true">📄</span>
+            <span id="doc-contract-name" class="doc-header-name">Contract Document</span>
+            <span class="doc-header-note">Clauses highlighted by risk severity</span>
+          </div>
+          <div id="document-content" class="document-content"></div>
+        </div>
+
+        <!-- MATRIX VIEW -->
+        <div id="matrix-view" class="matrix-view" style="display:none;" aria-label="Risk matrix">
+          <div class="matrix-grid-title">Risk Matrix — All Clauses</div>
+          <div id="matrix-grid" class="matrix-grid"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         RIGHT PANEL — Clause Detail & Redline
+         ============================================================ -->
+    <aside class="right-panel" aria-label="Clause details and AI redline">
+
+      <!-- Placeholder when nothing selected -->
+      <div id="detail-placeholder" class="detail-placeholder">
+        <div class="detail-placeholder-bg" aria-hidden="true"></div>
+        <span class="detail-placeholder-icon" aria-hidden="true">💬</span>
+        <p class="detail-placeholder-title">Select a Clause</p>
+        <p class="detail-placeholder-sub">Click any clause card to view AI risk analysis and suggested redlines</p>
+      </div>
+
+      <!-- Clause Detail View -->
+      <div id="detail-view" class="detail-view" aria-live="polite">
+
+        <!-- Sticky header -->
+        <div class="detail-header">
+          <div class="detail-header-top">
+            <div id="detail-type" class="detail-type">Clause Type</div>
+            <span id="detail-badge" class="severity-badge" style="display:none;"></span>
+          </div>
+          <div id="detail-meta" class="detail-meta"></div>
+          <!-- Tabs -->
+          <div class="detail-tabs" role="tablist" aria-label="Clause detail tabs">
+            <button class="detail-tab active" data-tab="analysis" id="tab-analysis" role="tab" aria-selected="true">Analysis</button>
+            <button class="detail-tab" data-tab="diff" id="tab-diff" role="tab" aria-selected="false">Redline Diff</button>
+            <button class="detail-tab" data-tab="edit" id="tab-edit" role="tab" aria-selected="false">Edit Redline</button>
+          </div>
+        </div>
+
+        <!-- TAB: Analysis -->
+        <div id="tab-panel-analysis" class="tab-panel" role="tabpanel" aria-labelledby="tab-analysis">
+
+          <!-- Original Text -->
+          <div class="detail-section">
+            <div class="detail-section-title">📄 Original Clause Text</div>
+            <div id="original-text" class="original-text" aria-label="Original clause text"></div>
+          </div>
+
+          <!-- AI Risk Explanation -->
+          <div class="detail-section">
+            <div class="detail-section-title">🤖 AI Risk Explanation</div>
+            <p id="risk-explanation" class="risk-explanation"></p>
+          </div>
+
+          <!-- Risk Factors -->
+          <div id="risk-factors-section" class="detail-section" style="display:none;">
+            <div class="detail-section-title">⚠️ Risk Factors</div>
+            <ul id="risk-factors-list" class="risk-factors-list"></ul>
+          </div>
+
+        </div>
+
+        <!-- TAB: Redline Diff -->
+        <div id="tab-panel-diff" class="tab-panel" role="tabpanel" aria-labelledby="tab-diff" style="display:none;">
+          <div class="detail-section">
+            <div class="detail-section-title">📝 Visual Diff — Original vs Suggested</div>
+            <div id="diff-view" class="diff-view"></div>
+          </div>
+          <div id="redline-section-diff" class="detail-section">
+            <div class="detail-section-title">✏️ Suggested Redline</div>
+            <div id="redline-box" class="redline-box" aria-label="Suggested redline text">
+              <div class="redline-box-actions">
+                <button class="copy-btn" id="copy-redline-btn" aria-label="Copy redline to clipboard">📋 Copy</button>
+                <button class="accept-btn" id="accept-redline-btn" aria-label="Accept this redline" title="Mark redline as accepted">✅ Accept</button>
+              </div>
+              <span id="redline-text"></span>
+            </div>
+          </div>
+          <div id="no-redline-msg" class="no-redline-msg" style="display:none;">
+            <span aria-hidden="true">✅</span> No redline suggested — this clause is acceptable.
+          </div>
+        </div>
+
+        <!-- TAB: Edit Redline -->
+        <div id="tab-panel-edit" class="tab-panel" role="tabpanel" aria-labelledby="tab-edit" style="display:none;">
+          <div class="detail-section">
+            <div class="detail-section-title">✏️ Custom Redline Editor</div>
+            <p class="edit-help-text">Edit the AI-suggested redline or write your own. Click Save to persist changes.</p>
+            <textarea
+              id="redline-editor"
+              class="redline-editor"
+              placeholder="Enter your custom redline text here…"
+              aria-label="Custom redline editor"
+              rows="8"
+            ></textarea>
+            <div class="editor-actions">
+              <button class="btn-save-redline" id="btn-save-redline" aria-label="Save custom redline">💾 Save Redline</button>
+              <button class="btn-reset-redline" id="btn-reset-redline" aria-label="Reset to AI suggestion">↺ Reset to AI</button>
+            </div>
+          </div>
+          <div class="detail-section" id="accepted-status-section" style="display:none;">
+            <div class="accepted-status" id="accepted-status">
+              <span class="accepted-badge">✅ Redline Accepted</span>
+              <button class="btn-unaccept" id="btn-unaccept" aria-label="Unaccept redline">Undo Accept</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </main>
+</div>
+
+<!-- Toast Notification Container -->
+<div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+<!-- ================================================================
+     PLAYBOOK RULES MODAL
+     ================================================================ -->
+<div id="playbook-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="playbook-modal-title" style="display:none;">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 class="modal-title" id="playbook-modal-title">⚙️ Playbook Configuration</h2>
+      <button class="modal-close" id="playbook-modal-close" aria-label="Close playbook modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">
+        Select a playbook and customize risk sensitivity for your analysis. Rules define which clause types are flagged and at what severity.
+      </p>
+
+      <!-- Playbook Cards -->
+      <div class="section-label" style="margin-bottom: 12px;">Available Playbooks</div>
+      <div class="playbook-cards" id="playbook-cards">
+        <div class="playbook-card active" data-playbook="standard" id="pb-standard" role="radio" tabindex="0" aria-checked="true">
+          <span class="pb-icon" aria-hidden="true">⚖️</span>
+          <div class="pb-info">
+            <div class="pb-name">Standard Risk</div>
+            <div class="pb-desc">Balanced assessment for general commercial contracts</div>
+          </div>
+          <span class="pb-check" aria-hidden="true">✓</span>
+        </div>
+        <div class="playbook-card" data-playbook="nda" id="pb-nda" role="radio" tabindex="0" aria-checked="false">
+          <span class="pb-icon" aria-hidden="true">🤫</span>
+          <div class="pb-info">
+            <div class="pb-name">NDA Playbook</div>
+            <div class="pb-desc">Optimized for non-disclosure agreements</div>
+          </div>
+          <span class="pb-check" aria-hidden="true">✓</span>
+        </div>
+        <div class="playbook-card" data-playbook="vendor" id="pb-vendor" role="radio" tabindex="0" aria-checked="false">
+          <span class="pb-icon" aria-hidden="true">📦</span>
+          <div class="pb-info">
+            <div class="pb-name">Vendor Agreement</div>
+            <div class="pb-desc">Supplier/software procurement risk review</div>
+          </div>
+          <span class="pb-check" aria-hidden="true">✓</span>
+        </div>
+        <div class="playbook-card" data-playbook="employment" id="pb-employment" role="radio" tabindex="0" aria-checked="false">
+          <span class="pb-icon" aria-hidden="true">👤</span>
+          <div class="pb-info">
+            <div class="pb-name">Employment</div>
+            <div class="pb-desc">Executive and general employment contracts</div>
+          </div>
+          <span class="pb-check" aria-hidden="true">✓</span>
+        </div>
+        <div class="playbook-card" data-playbook="saas" id="pb-saas" role="radio" tabindex="0" aria-checked="false">
+          <span class="pb-icon" aria-hidden="true">☁️</span>
+          <div class="pb-info">
+            <div class="pb-name">SaaS / MSA</div>
+            <div class="pb-desc">Software-as-a-Service master service agreements</div>
+          </div>
+          <span class="pb-check" aria-hidden="true">✓</span>
+        </div>
+      </div>
+
+      <!-- Sensitivity -->
+      <div class="section-label" style="margin: 20px 0 12px;">Risk Sensitivity</div>
+      <div class="sensitivity-cards">
+        <div class="sensitivity-card" data-sensitivity="strict" id="sc-strict" role="radio" tabindex="0">
+          <div class="sc-name">🔴 Strict</div>
+          <div class="sc-desc">Flags maximum risks. Best for high-stakes contracts.</div>
+        </div>
+        <div class="sensitivity-card active" data-sensitivity="standard" id="sc-standard" role="radio" tabindex="0">
+          <div class="sc-name">🟡 Standard</div>
+          <div class="sc-desc">Balanced detection. Recommended for most contracts.</div>
+        </div>
+        <div class="sensitivity-card" data-sensitivity="permissive" id="sc-permissive" role="radio" tabindex="0">
+          <div class="sc-name">🟢 Permissive</div>
+          <div class="sc-desc">Essential risks only. Good for pre-negotiated templates.</div>
+        </div>
+      </div>
+
+      <!-- Rule flags -->
+      <div class="section-label" style="margin: 20px 0 12px;">Active Clause Rules</div>
+      <div id="clause-rules" class="clause-rules"></div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-secondary" id="playbook-modal-cancel">Cancel</button>
+      <button class="modal-btn-primary" id="playbook-modal-apply">Apply & Re-analyze</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     EXPORT MODAL
+     ================================================================ -->
+<div id="export-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" style="display:none;">
+  <div class="modal-panel modal-panel-sm">
+    <div class="modal-header">
+      <h2 class="modal-title" id="export-modal-title">📤 Export Report</h2>
+      <button class="modal-close" id="export-modal-close" aria-label="Close export modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Choose an export format for your analysis report.</p>
+      <div class="export-options">
+        <button class="export-option-btn" id="export-json" data-format="json" aria-label="Export as JSON">
+          <span class="export-icon" aria-hidden="true">{ }</span>
+          <div class="export-info">
+            <div class="export-name">JSON Report</div>
+            <div class="export-desc">Structured data — ideal for integrations</div>
+          </div>
+        </button>
+        <button class="export-option-btn" id="export-markdown" data-format="markdown" aria-label="Export as Markdown">
+          <span class="export-icon" aria-hidden="true">#</span>
+          <div class="export-info">
+            <div class="export-name">Markdown Report</div>
+            <div class="export-desc">Human-readable — paste into docs or wikis</div>
+          </div>
+        </button>
+        <button class="export-option-btn" id="export-html" data-format="html" aria-label="Export as HTML Report">
+          <span class="export-icon" aria-hidden="true">&lt;/&gt;</span>
+          <div class="export-info">
+            <div class="export-name">HTML Report</div>
+            <div class="export-desc">Styled audit report — open in any browser</div>
+          </div>
+        </button>
+        <button class="export-option-btn" id="export-redline" data-format="redline" aria-label="Export redlined contract">
+          <span class="export-icon" aria-hidden="true">✏️</span>
+          <div class="export-info">
+            <div class="export-name">Redlined Contract</div>
+            <div class="export-desc">Contract text with accepted redlines applied</div>
+          </div>
+        </button>
+      </div>
+      <div id="export-accepted-note" class="export-accepted-note" style="display:none;">
+        <span aria-hidden="true">ℹ️</span> <span id="export-accepted-count">0</span> redlines have been accepted and will be included.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-secondary" id="export-modal-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF.js + Mammoth.js for client-side file parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

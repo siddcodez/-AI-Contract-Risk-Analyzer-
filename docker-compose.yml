@@ -1,0 +1,89 @@
+version: "3.9"
+
+# ============================================================
+# AI Contract Risk Analyzer — local development stack
+# Run: docker compose up -d
+# Stop: docker compose down
+# Wipe data: docker compose down -v
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL 16 with pgvector pre-installed
+  # ----------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: contract_risk_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: contract_risk_db
+      POSTGRES_USER: contract_user
+      POSTGRES_PASSWORD: contract_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contract_user -d contract_risk_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  # Redis 7 — broker, result backend, cache, pub/sub
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: contract_risk_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ----------------------------------------------------------
+  # MinIO — S3-compatible local object storage
+  # Console UI: http://localhost:9001 (minioadmin / minioadmin)
+  # ----------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: contract_risk_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  # NOTE: The FastAPI app and Celery workers are intentionally
+  # NOT included here for M0. Run them locally with:
+  #   uvicorn app.main:app --reload
+  #   celery -A app.workers.celery_app worker -l info
+  # This keeps the dev loop fast (no image rebuild on code change).
+  # A production-ready compose override will be added at M14.
+  # ----------------------------------------------------------
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
