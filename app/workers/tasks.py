@@ -52,6 +52,7 @@ def process_contract_job(self: Task, job_id: str) -> dict[str, Any]:
             await processing_service.process_contract(session, job_uuid)
         await engine.dispose()
 
+    retries = getattr(getattr(self, "request", None), "retries", 0)
     try:
         asyncio.run(_run())
         logger.info("Completed process_contract_job task", job_id=job_id)
@@ -60,12 +61,15 @@ def process_contract_job(self: Task, job_id: str) -> dict[str, Any]:
         logger.warning(
             "Transient error during process_contract_job, scheduling retry",
             job_id=job_id,
-            attempt=self.request.retries + 1,
+            attempt=retries + 1,
             exc_info=exc,
         )
         try:
-            raise self.retry(exc=exc, countdown=5 * (2**self.request.retries))
-        except self.MaxRetriesExceededError:
+            retry_fn = getattr(self, "retry", None)
+            if retry_fn:
+                raise retry_fn(exc=exc, countdown=5 * (2**retries))
+            return {"job_id": job_id, "status": "failed", "error": str(exc)}
+        except getattr(self, "MaxRetriesExceededError", Exception):
             logger.error(
                 "Max retries exceeded for process_contract_job",
                 job_id=job_id,
@@ -117,6 +121,7 @@ def analyze_contract_job(self: Task, analysis_job_id: str) -> dict[str, Any]:
             await analysis_service.analyze_contract(session, job_uuid)
         await engine.dispose()
 
+    retries = getattr(getattr(self, "request", None), "retries", 0)
     try:
         asyncio.run(_run())
         logger.info("Completed analyze_contract_job task", analysis_job_id=analysis_job_id)
@@ -125,12 +130,15 @@ def analyze_contract_job(self: Task, analysis_job_id: str) -> dict[str, Any]:
         logger.warning(
             "Transient error during analyze_contract_job, scheduling retry",
             analysis_job_id=analysis_job_id,
-            attempt=self.request.retries + 1,
+            attempt=retries + 1,
             exc_info=exc,
         )
         try:
-            raise self.retry(exc=exc, countdown=5 * (2**self.request.retries))
-        except self.MaxRetriesExceededError:
+            retry_fn = getattr(self, "retry", None)
+            if retry_fn:
+                raise retry_fn(exc=exc, countdown=5 * (2**retries))
+            return {"analysis_job_id": analysis_job_id, "status": "failed", "error": str(exc)}
+        except getattr(self, "MaxRetriesExceededError", Exception):
             logger.error(
                 "Max retries exceeded for analyze_contract_job",
                 analysis_job_id=analysis_job_id,

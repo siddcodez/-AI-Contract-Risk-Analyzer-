@@ -137,4 +137,3 @@ class TestContractChunkRepoValidations:
             await contract_chunk_repo.similarity_search(
                 mock_session, valid_vec, distance_metric="euclidean_unsupported"
             )
-

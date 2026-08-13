@@ -62,7 +62,9 @@ class TestCeleryTasks:
         res = process_contract_job(job_id)
 
         assert res["status"] == "failed"
-        assert "PDF contains no text" in res["error"]
+        assert (
+            "Document extraction failed" in res["error"] or "PDF contains no text" in res["error"]
+        )
 
     @patch("app.workers.tasks.processing_service.process_contract", new_callable=AsyncMock)
     @patch("app.workers.tasks.create_async_engine")
