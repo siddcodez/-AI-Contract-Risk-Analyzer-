@@ -125,20 +125,49 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
 
         await contract_chunk_repo.bulk_create(session, chunks_data=chunks_data)
 
-        # 10. Mark completed
+        # 10. Mark ProcessingJob and Contract as completed
         finish_time = datetime.now(UTC)
         job.status = JobStatus.completed
         job.completed_at = finish_time
         job.error_message = None
 
         await contract_repo.update_status(session, contract.id, ContractStatus.completed)
+        # --- PROCESSING TRANSACTION COMMIT ---
         await session.commit()
+
+        # Re-set tenant context after commit
+        await set_tenant_context(session, str(job.org_id))
+
+        # 11. Create AnalysisJob for the processed contract/version (M4)
+        from app.repositories import analysis_job_repo
+
+        analysis_job = await analysis_job_repo.create(
+            session,
+            contract_id=contract.id,
+            version_id=latest_version.id,
+            org_id=job.org_id,
+        )
+        # --- ANALYSIS TRANSACTION COMMIT ---
+        await session.commit()
+
+        # 12. Only AFTER commit, enqueue async analysis task
+        try:
+            from app.workers.tasks import analyze_contract_job
+
+            analyze_contract_job.delay(str(analysis_job.id))
+        except Exception as exc:
+            logger.error(
+                "Failed to enqueue analyze_contract_job task",
+                analysis_job_id=str(analysis_job.id),
+                exc_info=exc,
+            )
 
         logger.info(
             "Contract processing completed successfully",
             job_id=str(job_id),
             contract_id=str(contract.id),
             chunks_count=len(chunks),
+            analysis_job_id=str(analysis_job.id),
         )
         return job
 

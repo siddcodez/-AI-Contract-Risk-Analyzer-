@@ -17,8 +17,13 @@ from app.services import processing_service
 def sample_ids() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
     return (uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
-
-class TestProcessingService:
+    @patch(
+        "app.workers.tasks.analyze_contract_job.delay",
+    )
+    @patch(
+        "app.services.processing_service.analysis_job_repo.create",
+        new_callable=AsyncMock,
+    )
     @patch("app.services.processing_service.storage_service.download_file")
     @patch(
         "app.services.processing_service.contract_chunk_repo.bulk_create",
@@ -63,6 +68,8 @@ class TestProcessingService:
         mock_delete_chunks: AsyncMock,
         mock_bulk_create_chunks: AsyncMock,
         mock_download: MagicMock,
+        mock_create_analysis_job: AsyncMock,
+        mock_task_delay: MagicMock,
         sample_ids: tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID],
     ) -> None:
         job_id, contract_id, version_id, org_id = sample_ids
@@ -88,6 +95,11 @@ class TestProcessingService:
         mock_version.id = version_id
         mock_list_versions.return_value = [mock_version]
 
+        # Setup mock analysis job
+        mock_analysis_job = MagicMock()
+        mock_analysis_job.id = uuid.uuid4()
+        mock_create_analysis_job.return_value = mock_analysis_job
+
         # Setup mock file content
         mock_download.return_value = b"Master Services Agreement\n\nClause 1: Scope of Work."
 
@@ -99,7 +111,98 @@ class TestProcessingService:
         assert res_job.status == JobStatus.completed
         mock_download.assert_called_once_with(mock_contract.storage_key)
         mock_bulk_create_chunks.assert_called_once()
+        mock_create_analysis_job.assert_called_once()
+        mock_task_delay.assert_called_once_with(str(mock_analysis_job.id))
         assert mock_session.commit.call_count >= 2
+
+    @patch(
+        "app.workers.tasks.analyze_contract_job.delay",
+        side_effect=Exception("Broker connection error"),
+    )
+    @patch(
+        "app.services.processing_service.analysis_job_repo.create",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.processing_service.storage_service.download_file")
+    @patch(
+        "app.services.processing_service.contract_chunk_repo.bulk_create",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.contract_chunk_repo.delete_by_contract_and_version",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.contract_version_repo.list_by_contract",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.contract_repo.get_by_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.contract_repo.update_status",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.processing_job_repo.update_status",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.processing_job_repo.get_by_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.processing_service.set_tenant_context",
+        new_callable=AsyncMock,
+    )
+    async def test_enqueue_failure_does_not_fail_completed_processing(
+        self,
+        mock_set_ctx: AsyncMock,
+        mock_get_job: AsyncMock,
+        mock_update_job_status: AsyncMock,
+        mock_update_contract_status: AsyncMock,
+        mock_get_contract: AsyncMock,
+        mock_list_versions: AsyncMock,
+        mock_delete_chunks: AsyncMock,
+        mock_bulk_create_chunks: AsyncMock,
+        mock_download: MagicMock,
+        mock_create_analysis_job: AsyncMock,
+        mock_task_delay: MagicMock,
+        sample_ids: tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID],
+    ) -> None:
+        job_id, contract_id, version_id, org_id = sample_ids
+
+        mock_job = MagicMock()
+        mock_job.id = job_id
+        mock_job.contract_id = contract_id
+        mock_job.org_id = org_id
+        mock_job.status = JobStatus.queued
+        mock_get_job.return_value = mock_job
+
+        mock_contract = MagicMock()
+        mock_contract.id = contract_id
+        mock_contract.storage_key = f"{org_id}/{contract_id}/contract.txt"
+        mock_contract.content_type = "text/plain"
+        mock_contract.file_name = "contract.txt"
+        mock_get_contract.return_value = mock_contract
+
+        mock_version = MagicMock()
+        mock_version.id = version_id
+        mock_list_versions.return_value = [mock_version]
+
+        mock_analysis_job = MagicMock()
+        mock_analysis_job.id = uuid.uuid4()
+        mock_create_analysis_job.return_value = mock_analysis_job
+
+        mock_download.return_value = b"Master Services Agreement"
+        mock_session = AsyncMock()
+
+        res_job = await processing_service.process_contract(mock_session, job_id)
+
+        assert res_job.status == JobStatus.completed
+        mock_create_analysis_job.assert_called_once()
+        mock_task_delay.assert_called_once()
 
     @patch("app.services.processing_service.processing_job_repo.get_by_id", new_callable=AsyncMock)
     @patch("app.services.processing_service.set_tenant_context", new_callable=AsyncMock)

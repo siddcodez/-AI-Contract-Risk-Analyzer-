@@ -64,6 +64,35 @@ class Settings(BaseSettings):
         default="mock", description="Embedding provider (mock, openai, etc.)"
     )
 
+    # ---- LLM / Risk Analysis (M4) -------------------------------------------
+    LLM_PROVIDER: str = Field(
+        default="mock", description="LLM provider (mock, openai, anthropic, etc.)"
+    )
+    LLM_MODEL: str = Field(default="mock-risk-analyzer", description="LLM model identifier")
+    LLM_API_KEY: str | None = Field(default=None, description="API key for LLM provider")
+    LLM_TEMPERATURE: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="LLM sampling temperature"
+    )
+    MAX_ANALYSIS_TOKENS: int = Field(
+        default=4000, ge=100, description="Max tokens per analysis request"
+    )
+
+    # ---- Retrieval / RAG / Vector Search (M5) -------------------------------
+    VECTOR_DISTANCE_METRIC: str = Field(
+        default="cosine",
+        description="Distance metric for pgvector search (cosine, l2, inner_product)",
+    )
+    RETRIEVAL_TOP_K: int = Field(default=8, ge=1, description="Default top K chunks to retrieve")
+    RETRIEVAL_MIN_SCORE: float = Field(
+        default=0.20, ge=0.0, le=1.0, description="Minimum similarity score threshold"
+    )
+    MAX_RAG_CONTEXT_CHUNKS: int = Field(
+        default=12, ge=1, description="Maximum chunks included in RAG context"
+    )
+    RAG_CONTEXT_MAX_CHARS: int = Field(
+        default=12000, ge=100, description="Maximum character budget for RAG context"
+    )
+
     # ---- JWT / Security -----------------------------------------------------
     JWT_ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, ge=5)
