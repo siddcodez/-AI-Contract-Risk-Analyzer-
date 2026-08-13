@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
     CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
 
+    # ---- File Upload --------------------------------------------------------
+    MAX_FILE_SIZE_MB: int = Field(default=50, ge=1, description="Maximum upload file size in MB")
+
     # ---- JWT / Security -----------------------------------------------------
     JWT_ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, ge=5)
