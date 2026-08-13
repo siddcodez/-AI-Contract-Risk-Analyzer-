@@ -147,8 +147,7 @@ async def analyze_contract(
                     )
                     if grounded_results:
                         top_match = grounded_results[0]
-                        if chunk_id is None:
-                            chunk_id = top_match["chunk_id"]
+                        chunk_id = top_match["chunk_id"]
                         metadata_json["grounding"] = {
                             "chunk_id": str(top_match["chunk_id"]),
                             "chunk_index": top_match["chunk_index"],
