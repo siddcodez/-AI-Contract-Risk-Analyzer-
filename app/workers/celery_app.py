@@ -22,8 +22,7 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
-        # Task modules will be listed here as they are added in later milestones.
-        # e.g. "app.workers.tasks.extraction",
+        "app.workers.tasks",
     ],
 )
 

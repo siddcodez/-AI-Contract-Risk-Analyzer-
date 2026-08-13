@@ -51,8 +51,18 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
     CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
 
-    # ---- File Upload --------------------------------------------------------
+    # ---- File Upload & Chunking ---------------------------------------------
     MAX_FILE_SIZE_MB: int = Field(default=50, ge=1, description="Maximum upload file size in MB")
+    CHUNK_SIZE: int = Field(default=1000, ge=100, description="Chunk size in characters")
+    CHUNK_OVERLAP: int = Field(default=200, ge=0, description="Chunk overlap in characters")
+
+    # ---- Embeddings ---------------------------------------------------------
+    EMBEDDING_DIMENSION: int = Field(
+        default=1536, ge=1, description="Vector dimension for embeddings"
+    )
+    EMBEDDING_PROVIDER: str = Field(
+        default="mock", description="Embedding provider (mock, openai, etc.)"
+    )
 
     # ---- JWT / Security -----------------------------------------------------
     JWT_ALGORITHM: str = Field(default="HS256")

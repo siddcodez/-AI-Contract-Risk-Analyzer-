@@ -58,14 +58,34 @@ async def upload_contract(
         file_data=file_data,
     )
 
-    # Orchestrate upload
-    return await contract_service.upload_contract(
+    # Orchestrate upload (creates contract, version, and job in session)
+    response = await contract_service.upload_contract(
         session,
         user=user,
         file_data=file_data,
         validated=validated,
         title=title if title else None,
     )
+
+    # Commit transaction to PostgreSQL before enqueuing Celery task
+    await session.commit()
+
+    # Enqueue processing task safely post-commit
+    try:
+        from app.workers.tasks import process_contract_job
+
+        process_contract_job.delay(str(response.job_id))
+    except Exception as exc:
+        # Non-fatal if Redis/Celery is offline in local dev — job remains queued in DB
+        from app.core.logging import get_logger
+
+        get_logger(__name__).warning(
+            "Failed to enqueue Celery task post-commit",
+            job_id=str(response.job_id),
+            exc_info=exc,
+        )
+
+    return response
 
 
 @router.get(

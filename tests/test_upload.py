@@ -192,6 +192,7 @@ class TestUploadEndpoint:
                 new_callable=AsyncMock,
                 return_value=mock_job,
             ),
+            patch("app.workers.tasks.process_contract_job.delay") as mock_delay,
         ):
             try:
                 files = {
@@ -205,6 +206,7 @@ class TestUploadEndpoint:
                 assert data["status"] == "queued"
                 assert data["file_name"] == "contract.txt"
                 assert data["content_type"] == "text/plain"
+                mock_delay.assert_called_once_with(str(job_id))
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
                 app.dependency_overrides.pop(require_reviewer_or_above, None)

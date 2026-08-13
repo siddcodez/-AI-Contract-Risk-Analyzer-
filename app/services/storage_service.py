@@ -127,3 +127,33 @@ def delete_file(key: str) -> None:
             "Failed to delete file from storage",
             details={"key": key},
         ) from exc
+
+
+def download_file(key: str) -> bytes:
+    """Download file bytes from object storage.
+
+    Args:
+        key: The object key in the bucket.
+
+    Returns:
+        Raw file bytes.
+
+    Raises:
+        StorageError: If the download fails.
+    """
+    settings = get_settings()
+    try:
+        client = _get_s3_client()
+        response = client.get_object(
+            Bucket=settings.MINIO_BUCKET_NAME,
+            Key=key,
+        )
+        data: bytes = response["Body"].read()
+        logger.info("Downloaded file from storage", key=key, size=len(data))
+        return data
+    except ClientError as exc:
+        logger.error("Storage download failed", key=key, exc_info=exc)
+        raise StorageError(
+            "Failed to download file from storage",
+            details={"key": key},
+        ) from exc
