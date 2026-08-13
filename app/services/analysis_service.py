@@ -21,7 +21,7 @@ from app.repositories import (
     contract_version_repo,
     risk_finding_repo,
 )
-from app.services import llm_service
+from app.services import llm_service, retrieval_service
 
 logger = get_logger(__name__)
 
@@ -130,8 +130,6 @@ async def analyze_contract(
         )
 
         # Build RiskFinding records with M5 RAG grounding
-        from app.services import retrieval_service
-
         findings_rows = []
         for f in raw_findings:
             chunk_id = f.get("chunk_id")
