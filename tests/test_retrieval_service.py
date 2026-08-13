@@ -105,14 +105,14 @@ class TestRetrievalService:
 
 
 class TestContractChunkRepoValidations:
-    async def test_invalid_query_vector_dimension() -> None:
+    async def test_invalid_query_vector_dimension(self) -> None:
         mock_session = AsyncMock()
         bad_vector = [0.1, 0.2]  # wrong dimension
 
         with pytest.raises(ValueError, match="Query vector dimension"):
             await contract_chunk_repo.similarity_search(mock_session, bad_vector)
 
-    async def test_invalid_top_k() -> None:
+    async def test_invalid_top_k(self) -> None:
         mock_session = AsyncMock()
         dimension = get_settings().EMBEDDING_DIMENSION
         valid_vec = [0.1] * dimension
@@ -120,7 +120,7 @@ class TestContractChunkRepoValidations:
         with pytest.raises(ValueError, match="top_k must be at least 1"):
             await contract_chunk_repo.similarity_search(mock_session, valid_vec, top_k=0)
 
-    async def test_invalid_min_score() -> None:
+    async def test_invalid_min_score(self) -> None:
         mock_session = AsyncMock()
         dimension = get_settings().EMBEDDING_DIMENSION
         valid_vec = [0.1] * dimension
@@ -128,7 +128,7 @@ class TestContractChunkRepoValidations:
         with pytest.raises(ValueError, match=r"min_score must be between 0\.0 and 1\.0"):
             await contract_chunk_repo.similarity_search(mock_session, valid_vec, min_score=1.5)
 
-    async def test_unsupported_distance_metric() -> None:
+    async def test_unsupported_distance_metric(self) -> None:
         mock_session = AsyncMock()
         dimension = get_settings().EMBEDDING_DIMENSION
         valid_vec = [0.1] * dimension
@@ -137,3 +137,4 @@ class TestContractChunkRepoValidations:
             await contract_chunk_repo.similarity_search(
                 mock_session, valid_vec, distance_metric="euclidean_unsupported"
             )
+
