@@ -104,3 +104,54 @@ class RAGContextResponse(BaseModel):
     chunks_count: int
     total_chars: int
     items: list[ChunkSearchResultItem]
+
+
+class GroundedCitation(BaseModel):
+    """Structured evidence citation grounded in a retrieved contract chunk."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    chunk_id: uuid.UUID
+    chunk_index: int
+    similarity_score: float = Field(ge=0.0, le=1.0)
+    quote: str = Field(min_length=1, description="Verbatim quote from the referenced chunk")
+
+
+class AskContractRequest(BaseModel):
+    """Payload for grounded contract Q&A / RAG generation requests."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(
+        min_length=1,
+        max_length=2000,
+        description="Question to be answered using only retrieved contract context",
+    )
+    top_k: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Max candidate chunks to retrieve during vector search",
+    )
+    min_score: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score threshold (0.0 to 1.0)",
+    )
+    version_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional contract version ID filter",
+    )
+
+
+class AskContractResponse(BaseModel):
+    """Response wrapper for grounded contract Q&A."""
+
+    contract_id: uuid.UUID
+    query: str
+    answer: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    citations: list[GroundedCitation]
+    retrieval_count: int
+    model: str

@@ -29,6 +29,25 @@ from app.core.config import get_settings
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="")
 org_id_ctx: ContextVar[str] = ContextVar("org_id", default="")
 user_id_ctx: ContextVar[str] = ContextVar("user_id", default="")
+contract_id_ctx: ContextVar[str] = ContextVar("contract_id", default="")
+job_id_ctx: ContextVar[str] = ContextVar("job_id", default="")
+analysis_job_id_ctx: ContextVar[str] = ContextVar("analysis_job_id", default="")
+
+SENSITIVE_KEYS = {
+    "password",
+    "token",
+    "access_token",
+    "refresh_token",
+    "jwt",
+    "api_key",
+    "secret",
+    "authorization",
+    "auth_header",
+    "bearer_token",
+    "contract_text",
+    "embedding",
+    "embeddings",
+}
 
 
 def generate_request_id() -> str:
@@ -43,13 +62,30 @@ def generate_request_id() -> str:
 def _inject_context_vars(
     _logger: WrappedLogger, _method_name: str, event_dict: EventDict
 ) -> EventDict:
-    """Inject per-request context into every log record."""
+    """Inject per-request and domain correlation context into every log record."""
     if request_id := request_id_ctx.get(""):
         event_dict["request_id"] = request_id
     if org := org_id_ctx.get(""):
         event_dict["org_id"] = org
+        event_dict["organization_id"] = org
     if user := user_id_ctx.get(""):
         event_dict["user_id"] = user
+    if contract_id := contract_id_ctx.get(""):
+        event_dict["contract_id"] = contract_id
+    if job_id := job_id_ctx.get(""):
+        event_dict["job_id"] = job_id
+    if analysis_job_id := analysis_job_id_ctx.get(""):
+        event_dict["analysis_job_id"] = analysis_job_id
+    return event_dict
+
+
+def _sanitize_sensitive_data(
+    _logger: WrappedLogger, _method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Mask or remove sensitive fields before logging."""
+    for key in list(event_dict.keys()):
+        if key.lower() in SENSITIVE_KEYS:
+            event_dict[key] = "[REDACTED]"
     return event_dict
 
 
@@ -59,6 +95,55 @@ def _drop_color_message_key(
     """Remove uvicorn's colour_message key that leaks terminal escape codes."""
     event_dict.pop("color_message", None)
     return event_dict
+
+
+# ---------------------------------------------------------------------------
+# Correlation utilities
+# ---------------------------------------------------------------------------
+
+
+def set_correlation_context(
+    request_id: str | None = None,
+    org_id: str | None = None,
+    user_id: str | None = None,
+    contract_id: str | None = None,
+    job_id: str | None = None,
+    analysis_job_id: str | None = None,
+) -> list[tuple[ContextVar[str], Any]]:
+    """Set correlation variables for logging and return reset tokens."""
+    tokens: list[tuple[ContextVar[str], Any]] = []
+    if request_id is not None:
+        tokens.append((request_id_ctx, request_id_ctx.set(request_id)))
+    if org_id is not None:
+        tokens.append((org_id_ctx, org_id_ctx.set(org_id)))
+    if user_id is not None:
+        tokens.append((user_id_ctx, user_id_ctx.set(user_id)))
+    if contract_id is not None:
+        tokens.append((contract_id_ctx, contract_id_ctx.set(contract_id)))
+    if job_id is not None:
+        tokens.append((job_id_ctx, job_id_ctx.set(job_id)))
+    if analysis_job_id is not None:
+        tokens.append((analysis_job_id_ctx, analysis_job_id_ctx.set(analysis_job_id)))
+    return tokens
+
+
+def reset_correlation_context(tokens: list[tuple[ContextVar[str], Any]]) -> None:
+    """Reset context variables using previously returned tokens."""
+    for var, token in reversed(tokens):
+        var.reset(token)
+
+
+def clear_correlation_context() -> None:
+    """Clear all correlation context variables."""
+    for var in (
+        request_id_ctx,
+        org_id_ctx,
+        user_id_ctx,
+        contract_id_ctx,
+        job_id_ctx,
+        analysis_job_id_ctx,
+    ):
+        var.set("")
 
 
 # ---------------------------------------------------------------------------
@@ -78,11 +163,13 @@ def configure_logging() -> None:
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         _inject_context_vars,
+        _sanitize_sensitive_data,
         _drop_color_message_key,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
     ]
 
     if settings.is_production:

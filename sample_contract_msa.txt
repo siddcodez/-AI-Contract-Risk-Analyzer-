@@ -1,0 +1,24 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is entered into as of January 15, 2025, by and between Apex Global Solutions LLC ("Client") and Sovereign Tech Partners Inc. ("Vendor").
+
+1. SERVICES AND DELIVERABLES
+Vendor shall provide cloud migration, security compliance, and custom software development services as set forth in each Statement of Work ("SOW") executed under this Agreement.
+
+2. PAYMENT TERMS AND INVOICING
+Client shall pay all undisputed invoices within thirty (30) days of receipt (Net 30). Late payments shall accrue interest at the rate of 1.5% per month or the highest rate permitted by law.
+
+3. TERM AND TERMINATION
+This Agreement shall commence on the Effective Date and continue for an initial term of three (3) years. Either party may terminate this Agreement for convenience upon ninety (90) days' prior written notice to the other party. Either party may terminate immediately upon written notice if the other party materially breaches any provision and fails to cure within thirty (30) days.
+
+4. LIMITATION OF LIABILITY
+EXCEPT FOR WILLFUL MISCONDUCT OR BREACH OF CONFIDENTIALITY, IN NO EVENT SHALL EITHER PARTY'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT EXCEED TEN MILLION DOLLARS ($10,000,000) OR THE TOTAL FEES PAID BY CLIENT UNDER THE APPLICABLE SOW IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM. NEITHER PARTY SHALL BE LIABLE FOR INDIRECT, INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+
+5. INDEMNIFICATION
+Vendor agrees to defend, indemnify, and hold harmless Client, its officers, directors, and employees from and against any third-party claims, damages, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of any claim that the Deliverables infringe any third party's valid patent, copyright, or trade secret.
+
+6. CONFIDENTIALITY AND DATA PRIVACY
+Each party agrees to maintain the confidentiality of the other party's Proprietary Information with at least the same degree of care it uses for its own confidential information, but in no event less than a reasonable standard of care. Vendor shall comply with all applicable GDPR and CCPA data privacy regulations.
+
+7. GOVERNING LAW AND DISPUTE RESOLUTION
+This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without giving effect to any choice of law principles. Any dispute arising under this Agreement shall be resolved through binding arbitration in Wilmington, Delaware.

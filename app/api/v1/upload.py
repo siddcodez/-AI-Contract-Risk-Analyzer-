@@ -11,10 +11,11 @@ or admin role.  Read endpoints are available to any authenticated user.
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_reviewer_or_above
+from app.core.rate_limit import rate_limit_upload
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.contract import (
@@ -34,6 +35,7 @@ router = APIRouter(prefix="/contracts", tags=["contracts"])
     response_model=ContractUploadResponse,
     status_code=201,
     summary="Upload a contract document",
+    dependencies=[Depends(rate_limit_upload())],
 )
 async def upload_contract(
     file: UploadFile = File(..., description="Contract file (PDF, DOCX, or TXT)"),
@@ -58,6 +60,15 @@ async def upload_contract(
         file_data=file_data,
     )
 
+    from app.core.logging import get_logger
+
+    get_logger(__name__).info(
+        "upload_validated",
+        file_name=validated.sanitized_name,
+        file_size=validated.file_size,
+        content_type=validated.content_type,
+    )
+
     # Orchestrate upload (creates contract, version, and job in session)
     response = await contract_service.upload_contract(
         session,
@@ -72,9 +83,10 @@ async def upload_contract(
 
     # Enqueue processing task safely post-commit
     try:
+        from app.core.logging import request_id_ctx
         from app.workers.tasks import process_contract_job
 
-        process_contract_job.delay(str(response.job_id))
+        process_contract_job.delay(str(response.job_id), request_id=request_id_ctx.get(""))
     except Exception as exc:
         # Non-fatal if Redis/Celery is offline in local dev — job remains queued in DB
         from app.core.logging import get_logger
@@ -94,8 +106,8 @@ async def upload_contract(
     summary="List contracts for the current organization",
 )
 async def list_contracts(
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(default=0, ge=0, description="Items to skip"),
+    limit: int = Query(default=20, ge=1, le=100, description="Items per page (max 100)"),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> ContractListResponse:

@@ -56,8 +56,11 @@ class TestAnalysisService:
             org_id=org_id,
         )
         mock_session.commit.assert_called_once()
-        mock_task_delay.assert_called_once_with(str(mock_job.id))
+        assert mock_task_delay.call_args[0][0] == str(mock_job.id)
 
+    @patch("app.services.analysis_service.missing_clause_service.detect_missing_clauses", new_callable=AsyncMock)
+    @patch("app.services.analysis_service.contract_repo.get_by_id", new_callable=AsyncMock)
+    @patch("app.services.analysis_service.retrieval_service.search_chunks", new_callable=AsyncMock)
     @patch(
         "app.services.analysis_service.risk_finding_repo.bulk_create",
         new_callable=AsyncMock,
@@ -81,8 +84,12 @@ class TestAnalysisService:
         mock_list_chunks: AsyncMock,
         mock_delete_findings: AsyncMock,
         mock_bulk_create_findings: AsyncMock,
+        mock_search_chunks: AsyncMock,
+        mock_get_contract: AsyncMock,
+        mock_detect_missing: AsyncMock,
         sample_analysis_ids: tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID],
     ) -> None:
+        mock_search_chunks.return_value = []
         job_id, contract_id, version_id, org_id = sample_analysis_ids
 
         mock_job = MagicMock()

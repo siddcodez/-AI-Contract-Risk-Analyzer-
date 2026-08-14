@@ -1,0 +1,15 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
+  "/page": "app/page.js",
+  "/(dashboard)/contracts/[id]/ask/page": "app/(dashboard)/contracts/[id]/ask/page.js",
+  "/(dashboard)/contracts/[id]/findings/[findingId]/page": "app/(dashboard)/contracts/[id]/findings/[findingId]/page.js",
+  "/(dashboard)/contracts/[id]/search/page": "app/(dashboard)/contracts/[id]/search/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/upload/page": "app/(dashboard)/upload/page.js",
+  "/(dashboard)/contracts/[id]/analysis/page": "app/(dashboard)/contracts/[id]/analysis/page.js",
+  "/(dashboard)/settings/page": "app/(dashboard)/settings/page.js",
+  "/(dashboard)/contracts/page": "app/(dashboard)/contracts/page.js",
+  "/(dashboard)/contracts/[id]/page": "app/(dashboard)/contracts/[id]/page.js"
+}

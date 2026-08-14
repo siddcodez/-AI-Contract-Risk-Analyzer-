@@ -9,24 +9,25 @@ Architecture rules enforced here:
 - Request IDs are injected at the middleware level so every log line is correlated.
 """
 
-import time
-import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import boto3
 import redis.asyncio as aioredis
 from botocore.exceptions import ClientError
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import api_v1_router
+from app.api.v1.health import router as health_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
-from app.core.logging import configure_logging, get_logger, request_id_ctx
+from app.core.logging import configure_logging, get_logger
 from app.db.session import close_db, init_db
+from app.middleware.request_id import RequestIDMiddleware
 
 # Configure structured logging before anything else logs
 configure_logging()
@@ -117,43 +118,27 @@ app = FastAPI(
 # Middleware
 # ---------------------------------------------------------------------------
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.middleware("http")
-async def request_id_middleware(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """Inject a unique request ID into every request context.
-
-    The ID is:
-    - Set in the structlog context var (all log lines for this request carry it).
-    - Returned in the X-Request-ID response header for client-side correlation.
-    """
-
-    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-    token = request_id_ctx.set(req_id)
-
-    start = time.perf_counter()
-    try:
-        response: Response = await call_next(request)
-    finally:
-        duration_ms = (time.perf_counter() - start) * 1000
-        request_id_ctx.reset(token)
-        logger.info(
-            "Request completed",
-            method=request.method,
-            path=request.url.path,
-            status_code=getattr(response, "status_code", None),
-            duration_ms=round(duration_ms, 2),
-        )
-
-    response.headers["X-Request-ID"] = req_id
-    return response
+app.add_middleware(RequestIDMiddleware)
 
 
 # ---------------------------------------------------------------------------
 # Routers & exception handlers
 # ---------------------------------------------------------------------------
 
+app.include_router(health_router)
 app.include_router(api_v1_router)
 register_exception_handlers(app)
 

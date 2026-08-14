@@ -14,6 +14,7 @@ Creates:
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
@@ -22,10 +23,10 @@ down_revision = "c3d4e5f6a7b8"
 branch_labels = None
 depends_on = None
 
-SEVERITY_ENUM = sa.Enum(
-    "low", "medium", "high", "critical", name="risk_severity"
+SEVERITY_ENUM = postgresql.ENUM(
+    "low", "medium", "high", "critical", name="risk_severity", create_type=False
 )
-CATEGORY_ENUM = sa.Enum(
+CATEGORY_ENUM = postgresql.ENUM(
     "termination",
     "liability",
     "indemnification",
@@ -42,17 +43,39 @@ CATEGORY_ENUM = sa.Enum(
     "insurance",
     "other",
     name="risk_category",
+    create_type=False,
 )
-ANALYSIS_STATUS_ENUM = sa.Enum(
-    "queued", "processing", "completed", "failed", name="analysis_job_status"
+ANALYSIS_STATUS_ENUM = postgresql.ENUM(
+    "queued", "processing", "completed", "failed", name="analysis_job_status", create_type=False
 )
 
 
 def upgrade() -> None:
     # --- Create ENUMs safely ------------------------------------------------
-    SEVERITY_ENUM.create(op.get_bind(), checkfirst=True)
-    CATEGORY_ENUM.create(op.get_bind(), checkfirst=True)
-    ANALYSIS_STATUS_ENUM.create(op.get_bind(), checkfirst=True)
+    sa.Enum("low", "medium", "high", "critical", name="risk_severity").create(
+        op.get_bind(), checkfirst=True
+    )
+    sa.Enum(
+        "termination",
+        "liability",
+        "indemnification",
+        "payment",
+        "confidentiality",
+        "intellectual_property",
+        "data_privacy",
+        "security",
+        "governing_law",
+        "dispute_resolution",
+        "renewal",
+        "compliance",
+        "sla",
+        "insurance",
+        "other",
+        name="risk_category",
+    ).create(op.get_bind(), checkfirst=True)
+    sa.Enum("queued", "processing", "completed", "failed", name="analysis_job_status").create(
+        op.get_bind(), checkfirst=True
+    )
 
     # --- risk_findings table ------------------------------------------------
     op.create_table(

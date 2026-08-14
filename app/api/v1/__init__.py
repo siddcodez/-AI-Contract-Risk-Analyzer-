@@ -6,6 +6,7 @@ from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.contracts import router as contracts_router
 from app.api.v1.health import router as health_router
+from app.api.v1.missing_clauses import router as missing_clauses_router
 from app.api.v1.search import router as search_router
 from app.api.v1.upload import router as upload_router
 
@@ -14,5 +15,6 @@ api_v1_router.include_router(health_router)
 api_v1_router.include_router(contracts_router)
 api_v1_router.include_router(upload_router)
 api_v1_router.include_router(analysis_router)
+api_v1_router.include_router(missing_clauses_router)
 api_v1_router.include_router(search_router)
 api_v1_router.include_router(auth_router)

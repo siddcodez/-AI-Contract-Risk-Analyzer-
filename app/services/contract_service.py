@@ -56,6 +56,12 @@ async def upload_contract(
     Returns:
         ContractUploadResponse with contract_id and job_id.
     """
+    logger.info(
+        "upload_started",
+        user_id=str(user.id),
+        org_id=str(user.org_id),
+        file_name=validated.sanitized_name,
+    )
     contract_id = uuid.uuid4()
     display_title = title or validated.sanitized_name
 
@@ -67,6 +73,12 @@ async def upload_contract(
         file_data=file_data,
         key=storage_key,
         content_type=validated.content_type,
+    )
+    logger.info(
+        "upload_stored",
+        storage_key=storage_key,
+        user_id=str(user.id),
+        org_id=str(user.org_id),
     )
 
     # 3. Create Contract record
@@ -103,7 +115,7 @@ async def upload_contract(
     )
 
     logger.info(
-        "Contract uploaded",
+        "upload_completed",
         contract_id=str(contract_id),
         job_id=str(job.id),
         file_name=validated.sanitized_name,

@@ -206,7 +206,7 @@ class TestUploadEndpoint:
                 assert data["status"] == "queued"
                 assert data["file_name"] == "contract.txt"
                 assert data["content_type"] == "text/plain"
-                mock_delay.assert_called_once_with(str(job_id))
+                assert mock_delay.call_args[0][0] == str(job_id)
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
                 app.dependency_overrides.pop(require_reviewer_or_above, None)

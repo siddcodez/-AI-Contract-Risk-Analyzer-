@@ -77,6 +77,13 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
     # Re-set tenant context after commit
     await set_tenant_context(session, str(job.org_id))
 
+    logger.info(
+        "processing_started",
+        job_id=str(job_id),
+        contract_id=str(job.contract_id),
+        org_id=str(job.org_id),
+    )
+
     try:
         # 4. Fetch contract and version
         contract = await contract_repo.get_by_id(session, job.contract_id)
@@ -97,12 +104,30 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
             contract.content_type,
             contract.file_name,
         )
+        logger.info(
+            "extraction_completed",
+            job_id=str(job_id),
+            contract_id=str(contract.id),
+            text_len=len(extracted_text),
+        )
 
         # 7. Chunk text
         chunks = chunking_service.chunk_text(extracted_text)
+        logger.info(
+            "chunking_completed",
+            job_id=str(job_id),
+            contract_id=str(contract.id),
+            chunks_count=len(chunks),
+        )
 
         # 8. Generate embeddings
         embeddings = embedding_service.embed_texts(chunks)
+        logger.info(
+            "embedding_completed",
+            job_id=str(job_id),
+            contract_id=str(contract.id),
+            embeddings_count=len(embeddings),
+        )
 
         # 9. Clear old chunks (for idempotency) and bulk insert new chunks
         await contract_chunk_repo.delete_by_contract_and_version(
@@ -152,9 +177,10 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
 
         # 12. Only AFTER commit, enqueue async analysis task
         try:
+            from app.core.logging import request_id_ctx
             from app.workers.tasks import analyze_contract_job
 
-            analyze_contract_job.delay(str(analysis_job.id))
+            analyze_contract_job.delay(str(analysis_job.id), request_id=request_id_ctx.get(""))
         except Exception as exc:
             logger.error(
                 "Failed to enqueue analyze_contract_job task",
@@ -163,7 +189,7 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
             )
 
         logger.info(
-            "Contract processing completed successfully",
+            "processing_completed",
             job_id=str(job_id),
             contract_id=str(contract.id),
             chunks_count=len(chunks),
@@ -172,7 +198,11 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
         return job
 
     except Exception as exc:
-        logger.error("Processing job failed", job_id=str(job_id), exc_info=exc)
+        logger.error(
+            "processing_failed",
+            job_id=str(job_id),
+            exc_info=exc,
+        )
         await session.rollback()
 
         # Update status to failed safely

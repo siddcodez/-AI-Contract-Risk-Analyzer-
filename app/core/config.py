@@ -12,7 +12,7 @@ Usage:
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,7 +28,9 @@ class Settings(BaseSettings):
 
     # ---- Application -------------------------------------------------------
     APP_VERSION: str = Field(default="0.1.0")
-    ENVIRONMENT: Literal["development", "staging", "production"] = Field(default="development")
+    ENVIRONMENT: Literal["development", "test", "staging", "production"] = Field(
+        default="development"
+    )
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
     SECRET_KEY: str = Field(min_length=32)
 
@@ -77,6 +79,28 @@ class Settings(BaseSettings):
         default=4000, ge=100, description="Max tokens per analysis request"
     )
 
+    # ---- Groq / Grounded Q&A (M7.1) -----------------------------------------
+    GROQ_API_KEY: str | None = Field(
+        default=None, description="Groq API key for grounded contract Q&A"
+    )
+    GROQ_MODEL: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Default Groq model for grounded Q&A",
+    )
+    GROQ_BASE_URL: str = Field(
+        default="https://api.groq.com/openai/v1",
+        description="Groq API base URL",
+    )
+
+    # ---- Anthropic / Grounded Q&A (Optional) --------------------------------
+    ANTHROPIC_API_KEY: str | None = Field(
+        default=None, description="Anthropic API key for grounded contract Q&A"
+    )
+    ANTHROPIC_MODEL: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Default Anthropic model for grounded Q&A",
+    )
+
     # ---- Retrieval / RAG / Vector Search (M5) -------------------------------
     VECTOR_DISTANCE_METRIC: str = Field(
         default="cosine",
@@ -98,6 +122,17 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, ge=5)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, ge=1)
 
+    # ---- Rate Limiting ------------------------------------------------------
+    RATE_LIMIT_ENABLED: bool = Field(default=True)
+    RATE_LIMIT_UPLOAD: str = Field(default="10/minute")
+    RATE_LIMIT_SEARCH: str = Field(default="30/minute")
+    RATE_LIMIT_ANALYSIS: str = Field(default="10/minute")
+    RATE_LIMIT_ASK: str = Field(default="15/minute", description="Rate limit for grounded Q&A")
+
+    # ---- Pagination Limits --------------------------------------------------
+    MAX_PAGE_SIZE: int = Field(default=100, ge=1, le=500)
+    DEFAULT_PAGE_SIZE: int = Field(default=20, ge=1, le=100)
+
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
@@ -106,6 +141,26 @@ class Settings(BaseSettings):
                 "DATABASE_URL must use the postgresql+asyncpg:// scheme for async support"
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_production_config(self) -> "Settings":
+        """Validate that production environment does not use insecure default secrets."""
+        if self.ENVIRONMENT == "production":
+            insecure_secret_keywords = ["secret", "change-me", "dev", "default", "example"]
+            if any(kw in self.SECRET_KEY.lower() for kw in insecure_secret_keywords):
+                raise ValueError("Insecure SECRET_KEY detected in production environment")
+            if "postgres:postgres" in self.DATABASE_URL:
+                raise ValueError("Default database credentials detected in production environment")
+            if (
+                self.MINIO_ACCESS_KEY == "minioadmin" or self.MINIO_SECRET_KEY == "minioadmin"  # noqa: S105
+            ):
+                raise ValueError("Default MinIO/S3 credentials detected in production environment")
+            if self.LLM_PROVIDER != "mock" and not self.LLM_API_KEY:
+                raise ValueError(
+                    "LLM_API_KEY must be configured in production mode for provider "
+                    f"'{self.LLM_PROVIDER}'"
+                )
+        return self
 
     @property
     def is_production(self) -> bool:

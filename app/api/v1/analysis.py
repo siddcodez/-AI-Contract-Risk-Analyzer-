@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_reviewer_or_above
 from app.core.exceptions import NotFoundError
+from app.core.rate_limit import rate_limit_analysis
 from app.db.session import get_db
 from app.models.risk_finding import RiskCategory, RiskSeverity
 from app.models.user import User
@@ -136,6 +137,7 @@ async def get_findings_summary(
     response_model=AnalysisStatusResponse,
     status_code=202,
     summary="Trigger or re-run risk analysis on a contract",
+    dependencies=[Depends(rate_limit_analysis())],
 )
 async def trigger_analysis(
     contract_id: uuid.UUID,

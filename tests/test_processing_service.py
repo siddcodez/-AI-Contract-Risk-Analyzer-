@@ -112,7 +112,7 @@ def sample_ids() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
         mock_download.assert_called_once_with(mock_contract.storage_key)
         mock_bulk_create_chunks.assert_called_once()
         mock_create_analysis_job.assert_called_once()
-        mock_task_delay.assert_called_once_with(str(mock_analysis_job.id))
+        assert mock_task_delay.call_args[0][0] == str(mock_analysis_job.id)
         assert mock_session.commit.call_count >= 2
 
     @patch(

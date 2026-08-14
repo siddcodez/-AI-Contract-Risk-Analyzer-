@@ -117,11 +117,12 @@ async def similarity_search(
     # Score calculation: for cosine distance d, similarity score = 1.0 - d
     score_expr = 1.0 - dist_expr
 
-    query = (
-        select(ContractChunk, score_expr.label("score"))
-        .where(ContractChunk.embedding.is_not(None))
-        .where(score_expr >= min_score)
+    query = select(ContractChunk, score_expr.label("score")).where(
+        ContractChunk.embedding.is_not(None)
     )
+
+    if min_score > 0.0:
+        query = query.where(score_expr >= min_score)
 
     if contract_id is not None:
         query = query.where(ContractChunk.contract_id == contract_id)

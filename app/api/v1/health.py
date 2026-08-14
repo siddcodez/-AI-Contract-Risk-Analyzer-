@@ -1,29 +1,18 @@
-"""Health check endpoint.
+"""Health and readiness endpoints for observability & liveness probes.
 
-GET /api/v1/health
-
-Pings all backing services (DB, Redis, MinIO) and returns per-service status.
-The endpoint itself returns 200 even when a dependency is degraded — operators
-can see *which* service is down without the load balancer removing the app
-instance from rotation when it's the DB that's at fault.
-
-Response schema:
-    {
-        "status": "ok" | "degraded",
-        "version": "0.1.0",
-        "environment": "development",
-        "services": {
-            "db": "ok" | "error",
-            "redis": "ok" | "error",
-            "storage": "ok" | "error"
-        }
-    }
+Endpoints:
+- GET /health  (Liveness probe: fast, lightweight, no DB calls)
+- GET /ready   (Readiness probe: checks PostgreSQL, Redis, MinIO/S3, returns 200 or 503)
+- GET /api/v1/health (Legacy M1-M5 status check endpoint)
+- GET /api/v1/ready
 """
+
+import asyncio
 
 import boto3
 import redis.asyncio as aioredis
 from botocore.exceptions import ClientError
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, status
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
@@ -62,7 +51,6 @@ async def _check_storage() -> bool:
         return True
     except ClientError as exc:
         error_code = exc.response["Error"]["Code"]
-        # 404 means the bucket doesn't exist yet — still reachable
         if error_code == "404":
             return True
         logger.warning("Storage health check failed", exc_info=exc)
@@ -72,17 +60,88 @@ async def _check_storage() -> bool:
         return False
 
 
+async def _check_celery_worker() -> bool:
+    """Ping Celery workers. Returns True if at least one worker responds."""
+    try:
+        from app.workers.celery_app import celery_app
+
+        loop = asyncio.get_running_loop()
+        responses = await loop.run_in_executor(None, lambda: celery_app.control.ping(timeout=0.5))
+        return bool(responses)
+    except Exception as exc:
+        logger.warning("Celery worker health check failed", exc_info=exc)
+        return False
+
+
 @router.get(
     "/health",
-    summary="Health check",
-    description=(
-        "Returns the operational status of the application and all backing services. "
-        "Always returns HTTP 200; inspect `status` and `services` fields for detail."
-    ),
-    response_description="Health status of the application and its dependencies",
+    summary="Liveness probe",
+    description="Lightweight liveness check. Returns HTTP 200 if process is running.",
 )
-async def health_check() -> JSONResponse:
-    """Check the health of all backing services."""
+async def liveness_check() -> JSONResponse:
+    """Lightweight liveness probe (no external dependency checks)."""
+    settings = get_settings()
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "status": "ok",
+            "version": settings.APP_VERSION,
+            "environment": settings.ENVIRONMENT,
+        },
+    )
+
+
+@router.get(
+    "/ready",
+    summary="Readiness probe",
+    description="Verifies PostgreSQL, Redis, and MinIO storage connectivity. Returns 200 or 503.",
+)
+async def readiness_check(
+    include_workers: bool = Query(
+        default=False, description="Include Celery worker ping in status"
+    ),
+) -> JSONResponse:
+    """Readiness probe checking backing services."""
+    settings = get_settings()
+
+    db_ok = await check_db_connection()
+    redis_ok = await _check_redis()
+    storage_ok = await _check_storage()
+
+    dependencies: dict[str, str] = {
+        "database": "ok" if db_ok else "error",
+        "redis": "ok" if redis_ok else "error",
+        "storage": "ok" if storage_ok else "error",
+    }
+
+    if include_workers:
+        worker_ok = await _check_celery_worker()
+        dependencies["workers"] = "ok" if worker_ok else "degraded"
+
+    all_required_ok = db_ok and redis_ok and storage_ok
+    overall_status = "ok" if all_required_ok else "degraded"
+    status_code = status.HTTP_200_OK if all_required_ok else status.HTTP_503_SERVICE_UNAVAILABLE
+
+    logger.info("Readiness check", status=overall_status, **dependencies)
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall_status,
+            "version": settings.APP_VERSION,
+            "environment": settings.ENVIRONMENT,
+            "dependencies": dependencies,
+        },
+    )
+
+
+@router.get(
+    "/api/v1/health",
+    include_in_schema=False,
+    summary="Legacy M1-M5 health check",
+)
+async def legacy_health_check() -> JSONResponse:
+    """Legacy endpoint for M1-M5 test backwards compatibility."""
     settings = get_settings()
 
     db_ok = await check_db_connection()
@@ -98,10 +157,8 @@ async def health_check() -> JSONResponse:
     all_ok = all(v == "ok" for v in services.values())
     overall = "ok" if all_ok else "degraded"
 
-    logger.info("Health check", status=overall, **services)
-
     return JSONResponse(
-        status_code=200,  # always 200 — see module docstring
+        status_code=200,
         content={
             "status": overall,
             "version": settings.APP_VERSION,
