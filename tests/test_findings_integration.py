@@ -26,7 +26,7 @@ _ADMIN_URL = os.environ.get(
 )
 
 _APP_URL = os.environ.get(
-    "DATABASE_URL",
+    "APP_DATABASE_URL",
     "postgresql+asyncpg://app_user:app_pass@localhost:5432/contract_risk_db",
 )
 

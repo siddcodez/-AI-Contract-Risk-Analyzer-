@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listFindings, triggerAnalysis } from "@/lib/api/analysis";
+import { listFindings, triggerAnalysis, getMissingClauses } from "@/lib/api/analysis";
 import { getContractDetails } from "@/lib/api/contracts";
 import { useAuth } from "@/lib/auth/store";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   CheckCircle,
   ExternalLink,
   ShieldCheck,
+  AlertTriangle,
+  FileQuestion,
 } from "lucide-react";
 
 export default function AnalysisFindingsPage() {
@@ -62,17 +64,29 @@ export default function AnalysisFindingsPage() {
     enabled: !!contractId,
   });
 
+  // Missing clauses query
+  const {
+    data: missingData,
+    isLoading: isLoadingMissing,
+  } = useQuery({
+    queryKey: ["missing-clauses", contractId],
+    queryFn: () => getMissingClauses(contractId),
+    enabled: !!contractId,
+  });
+
   // Trigger analysis mutation
   const analyzeMutation = useMutation({
     mutationFn: () => triggerAnalysis(contractId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["findings", contractId] });
       queryClient.invalidateQueries({ queryKey: ["contract-analysis", contractId] });
+      queryClient.invalidateQueries({ queryKey: ["missing-clauses", contractId] });
       refetch();
     },
   });
 
   const findings = data?.items || [];
+  const missingClauses = missingData?.items || [];
   const total = data?.total || 0;
 
   const categories: RiskCategory[] = [
@@ -276,6 +290,66 @@ export default function AnalysisFindingsPage() {
           ))
         )}
       </div>
+      <div className="mt-4 flex flex-col gap-4 border-t border-outline-variant/40 pt-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-[#ea580c]" />
+            <h2 className="text-xl font-bold text-on-surface">
+              Missing Expected Clauses ({missingClauses.length})
+            </h2>
+          </div>
+          <span className="text-[11px] font-medium text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-md border border-outline-variant">
+            Deterministic Absence Engine
+          </span>
+        </div>
+
+        <p className="text-xs text-on-surface-variant leading-relaxed">
+          The following standard clauses are expected for this contract type but were not
+          identified among classified clauses or text patterns.
+          <span className="font-semibold text-primary ml-1">
+            (Not legal advice. Identifies deterministic absence of standard baseline clauses.)
+          </span>
+        </p>
+
+        {isLoadingMissing ? (
+          <div className="bg-surface-container-low border border-outline-variant rounded-xl p-5 flex flex-col gap-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        ) : missingClauses.length === 0 ? (
+          <div className="bg-surface-container-low border border-outline-variant rounded-xl p-5 flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            <p className="text-xs text-on-surface font-medium">
+              All baseline expected clauses for this contract type were identified.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {missingClauses.map((item) => (
+              <div
+                key={item.id}
+                className="bg-surface-container-low border border-[#ea580c]/30 rounded-xl p-4 flex flex-col gap-2.5 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FileQuestion className="w-4 h-4 text-[#ea580c] shrink-0" />
+                    <span className="text-sm font-bold text-on-surface capitalize">
+                      {item.clause_type.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono font-semibold text-[#ea580c] bg-[#ea580c]/10 px-2 py-0.5 rounded border border-[#ea580c]/20">
+                    {(item.confidence * 100).toFixed(0)}% Confidence
+                  </span>
+                </div>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  {item.reason}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

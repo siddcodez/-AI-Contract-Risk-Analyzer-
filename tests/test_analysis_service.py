@@ -58,7 +58,10 @@ class TestAnalysisService:
         mock_session.commit.assert_called_once()
         assert mock_task_delay.call_args[0][0] == str(mock_job.id)
 
-    @patch("app.services.analysis_service.missing_clause_service.detect_missing_clauses", new_callable=AsyncMock)
+    @patch(
+        "app.services.analysis_service.missing_clause_service.detect_missing_clauses",
+        new_callable=AsyncMock,
+    )
     @patch("app.services.analysis_service.contract_repo.get_by_id", new_callable=AsyncMock)
     @patch("app.services.analysis_service.retrieval_service.search_chunks", new_callable=AsyncMock)
     @patch(

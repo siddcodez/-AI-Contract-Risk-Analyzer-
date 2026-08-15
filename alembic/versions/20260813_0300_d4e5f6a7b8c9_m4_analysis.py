@@ -12,8 +12,8 @@ Creates:
 - Grants for app_user runtime role
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 

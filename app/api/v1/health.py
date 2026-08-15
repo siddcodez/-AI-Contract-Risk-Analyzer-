@@ -8,6 +8,7 @@ Endpoints:
 """
 
 import asyncio
+from typing import Any
 
 import boto3
 import redis.asyncio as aioredis
@@ -40,13 +41,16 @@ async def _check_storage() -> bool:
     """Head the MinIO/S3 bucket. Returns True on success."""
     settings = get_settings()
     try:
-        client = boto3.client(
-            "s3",
-            endpoint_url=settings.MINIO_ENDPOINT,
-            aws_access_key_id=settings.MINIO_ACCESS_KEY,
-            aws_secret_access_key=settings.MINIO_SECRET_KEY,
-            region_name="us-east-1",
-        )
+        client_kwargs: dict[str, Any] = {
+            "aws_access_key_id": settings.MINIO_ACCESS_KEY,
+            "aws_secret_access_key": settings.MINIO_SECRET_KEY,
+            "region_name": settings.AWS_REGION,
+            "use_ssl": settings.MINIO_USE_SSL,
+        }
+        if settings.MINIO_ENDPOINT:
+            client_kwargs["endpoint_url"] = settings.MINIO_ENDPOINT
+
+        client = boto3.client("s3", **client_kwargs)
         client.head_bucket(Bucket=settings.MINIO_BUCKET_NAME)
         return True
     except ClientError as exc:

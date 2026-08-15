@@ -1,11 +1,8 @@
 """API tests for Missing Clauses endpoint: GET /api/v1/contracts/{contract_id}/missing-clauses."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
-
-import pytest
-from httpx import AsyncClient
 
 from app.api.deps import get_current_user
 from app.main import app
@@ -13,6 +10,7 @@ from app.models.contract import Contract, ContractStatus
 from app.models.contract_version import ContractVersion
 from app.models.missing_clause import MissingClause
 from app.models.user import User, UserRole
+from httpx import AsyncClient
 
 
 def _make_user(
@@ -24,7 +22,7 @@ def _make_user(
     u.id = user_id or uuid.uuid4()
     u.email = "test@contractiq.io"
     u.full_name = "Test Reviewer"
-    u.hashed_password = "hashed_password"
+    u.password_hash = "hashed_password"
     u.role = role
     u.org_id = org_id or uuid.uuid4()
     u.is_active = True
@@ -99,13 +97,15 @@ class TestMissingClausesAPI:
             app.dependency_overrides.pop(get_current_user, None)
 
     @patch("app.api.v1.missing_clauses.contract_repo.get_by_id", new_callable=AsyncMock)
-    async def test_cross_tenant_isolation_returns_404(
+    async def test_cross_tenant_isolation_org_cannot_access_other_org_missing_clauses(
         self,
         mock_get_contract: AsyncMock,
         async_client: AsyncClient,
     ) -> None:
+        """Cross-tenant check: querying a contract owned by Org B returns exact 404 NOT_FOUND."""
         user_org_a = _make_user(org_id=uuid.uuid4())
-        mock_get_contract.return_value = None  # RLS filters out cross-tenant contracts
+        # Under RLS, querying across tenant boundary returns None
+        mock_get_contract.return_value = None
         app.dependency_overrides[get_current_user] = lambda: user_org_a
 
         contract_org_b_id = uuid.uuid4()
@@ -115,16 +115,71 @@ class TestMissingClausesAPI:
                 f"/api/v1/contracts/{contract_org_b_id}/missing-clauses",
                 headers=headers,
             )
+            # Pinned to exact status 404 to avoid leaking existence via 403
             assert res.status_code == 404
             data = res.json()
             assert data["error"]["code"] == "NOT_FOUND"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 
-    @patch("app.api.v1.missing_clauses.missing_clause_repo.list_by_contract_and_version", new_callable=AsyncMock)
-    @patch("app.api.v1.missing_clauses.contract_version_repo.list_by_contract", new_callable=AsyncMock)
+    @patch(
+        "app.api.v1.missing_clauses.missing_clause_repo.list_by_contract_and_version",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.api.v1.missing_clauses.contract_version_repo.list_by_contract",
+        new_callable=AsyncMock,
+    )
     @patch("app.api.v1.missing_clauses.contract_repo.get_by_id", new_callable=AsyncMock)
-    async def test_get_missing_clauses_success(
+    async def test_version_isolation_in_api_query(
+        self,
+        mock_get_contract: AsyncMock,
+        mock_list_versions: AsyncMock,
+        mock_list_missing: AsyncMock,
+        async_client: AsyncClient,
+    ) -> None:
+        """Querying a specific version_id retrieves records strictly scoped to that version."""
+        org_id = uuid.uuid4()
+        contract_id = uuid.uuid4()
+        v1_id = uuid.uuid4()
+        v2_id = uuid.uuid4()
+
+        user = _make_user(org_id=org_id)
+        contract = _make_contract(contract_id, org_id)
+        v1 = _make_version(v1_id, contract_id, org_id, version_number=1)
+        v2 = _make_version(v2_id, contract_id, org_id, version_number=2)
+
+        mock_get_contract.return_value = contract
+        mock_list_versions.return_value = [v1, v2]
+        mock_list_missing.return_value = []
+
+        app.dependency_overrides[get_current_user] = lambda: user
+
+        headers = {"Authorization": "Bearer fake.jwt.token"}
+        try:
+            res = await async_client.get(
+                f"/api/v1/contracts/{contract_id}/missing-clauses?version_id={v1_id}",
+                headers=headers,
+            )
+            assert res.status_code == 200
+            data = res.json()
+            assert data["version_id"] == str(v1_id)
+            mock_list_missing.assert_called_once()
+            called_args = mock_list_missing.call_args[0]
+            assert called_args[2] == v1_id  # target_version_id
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    @patch(
+        "app.api.v1.missing_clauses.missing_clause_repo.list_by_contract_and_version",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.api.v1.missing_clauses.contract_version_repo.list_by_contract",
+        new_callable=AsyncMock,
+    )
+    @patch("app.api.v1.missing_clauses.contract_repo.get_by_id", new_callable=AsyncMock)
+    async def test_get_missing_clauses_success_payload_structure(
         self,
         mock_get_contract: AsyncMock,
         mock_list_versions: AsyncMock,
@@ -139,7 +194,7 @@ class TestMissingClausesAPI:
         contract = _make_contract(contract_id, org_id)
         version = _make_version(version_id, contract_id, org_id)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mc1 = MissingClause(
             id=uuid.uuid4(),
             contract_id=contract_id,
@@ -147,7 +202,7 @@ class TestMissingClausesAPI:
             org_id=org_id,
             clause_type="data_protection",
             confidence=0.95,
-            reason="No data protection clause was identified among the classified clauses for this contract version.",
+            reason="No data protection clause was identified for this contract version.",
             status="missing",
             metadata_json={"contract_type": "vendor_msa"},
             created_at=now,
@@ -160,7 +215,7 @@ class TestMissingClausesAPI:
             org_id=org_id,
             clause_type="insurance",
             confidence=0.95,
-            reason="No insurance clause was identified among the classified clauses for this contract version.",
+            reason="No insurance clause was identified for this contract version.",
             status="missing",
             metadata_json={"contract_type": "vendor_msa"},
             created_at=now,

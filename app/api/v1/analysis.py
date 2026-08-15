@@ -19,14 +19,19 @@ from app.core.rate_limit import rate_limit_analysis
 from app.db.session import get_db
 from app.models.risk_finding import RiskCategory, RiskSeverity
 from app.models.user import User
-from app.repositories import analysis_job_repo, contract_repo, risk_finding_repo
+from app.repositories import analysis_job_repo, contract_repo, review_action_repo, risk_finding_repo
 from app.schemas.analysis import AnalysisStatusResponse
+from app.schemas.review import (
+    ReviewActionCreateRequest,
+    ReviewActionListResponse,
+    ReviewActionResponse,
+)
 from app.schemas.risk_finding import (
     RiskFindingListResponse,
     RiskFindingResponse,
     RiskSummaryResponse,
 )
-from app.services import analysis_service
+from app.services import analysis_service, review_service
 
 router = APIRouter(prefix="/contracts", tags=["analysis"])
 
@@ -164,4 +169,63 @@ async def trigger_analysis(
         status=job.status,
         findings_count=job.findings_count,
         error_message=job.error_message,
+    )
+
+
+@router.post(
+    "/{contract_id}/findings/{finding_id}/review",
+    response_model=ReviewActionResponse,
+    summary="Submit a reviewer decision on a risk finding",
+)
+async def submit_finding_review(
+    contract_id: uuid.UUID,
+    finding_id: uuid.UUID,
+    payload: ReviewActionCreateRequest,
+    user: User = Depends(require_reviewer_or_above),
+    session: AsyncSession = Depends(get_db),
+) -> ReviewActionResponse:
+    """Submit approval or rejection of a contract risk finding.
+
+    Requires Reviewer or Admin role (Viewer is rejected with 403 Forbidden).
+    Updates finding status and creates an append-only ReviewAction and AuditLog.
+    """
+    review = await review_service.submit_review_action(
+        session,
+        contract_id=contract_id,
+        finding_id=finding_id,
+        user=user,
+        action=payload.action,
+        comment=payload.comment,
+    )
+    return ReviewActionResponse.model_validate(review)
+
+
+@router.get(
+    "/{contract_id}/findings/{finding_id}/reviews",
+    response_model=ReviewActionListResponse,
+    summary="List review history for a risk finding",
+)
+async def list_finding_reviews(
+    contract_id: uuid.UUID,
+    finding_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> ReviewActionListResponse:
+    """List all review action records for a finding in reverse chronological order.
+
+    Subject to RLS — readable by all authenticated tenant roles.
+    """
+    _ = user  # RLS context active
+    contract = await contract_repo.get_by_id(session, contract_id)
+    if contract is None:
+        raise NotFoundError("Contract not found")
+
+    finding = await risk_finding_repo.get_by_id(session, finding_id)
+    if finding is None or finding.contract_id != contract_id:
+        raise NotFoundError("Risk finding not found")
+
+    reviews = await review_action_repo.list_by_finding(session, finding_id)
+    return ReviewActionListResponse(
+        items=[ReviewActionResponse.model_validate(r) for r in reviews],
+        total=len(reviews),
     )

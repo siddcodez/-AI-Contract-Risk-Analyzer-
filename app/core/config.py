@@ -38,16 +38,24 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(
         description="Async SQLAlchemy URL: postgresql+asyncpg://user:pass@host:port/db"
     )
+    MIGRATION_DATABASE_URL: str | None = Field(
+        default=None,
+        description="Elevated migration connection URL used for background tasks and migrations",
+    )
 
     # ---- Redis --------------------------------------------------------------
     REDIS_URL: str = Field(description="Redis connection URL: redis://host:port/db")
 
     # ---- MinIO / S3 ---------------------------------------------------------
-    MINIO_ENDPOINT: str = Field(description="Full URL including scheme: http://host:port")
+    MINIO_ENDPOINT: str | None = Field(
+        default=None,
+        description="Full URL including scheme: http://host:port (None for native AWS S3)",
+    )
     MINIO_ACCESS_KEY: str
     MINIO_SECRET_KEY: str
     MINIO_BUCKET_NAME: str = Field(default="contract-documents")
     MINIO_USE_SSL: bool = Field(default=False)
+    AWS_REGION: str = Field(default="us-east-1", description="AWS Region for S3")
 
     # ---- Celery -------------------------------------------------------------
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")

@@ -18,7 +18,10 @@ def grounding_ids() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
 
 
 class TestRAGGrounding:
-    @patch("app.services.analysis_service.missing_clause_service.detect_missing_clauses", new_callable=AsyncMock)
+    @patch(
+        "app.services.analysis_service.missing_clause_service.detect_missing_clauses",
+        new_callable=AsyncMock,
+    )
     @patch("app.services.analysis_service.contract_repo.get_by_id", new_callable=AsyncMock)
     @patch("app.services.analysis_service.retrieval_service.search_chunks", new_callable=AsyncMock)
     @patch("app.services.analysis_service.risk_finding_repo.bulk_create", new_callable=AsyncMock)

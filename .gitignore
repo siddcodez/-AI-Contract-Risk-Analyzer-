@@ -55,10 +55,13 @@ Thumbs.db
 *.log
 logs/
 
+# Node / Next.js
 frontend/node_modules/
 node_modules/
-.env
+.next/
+frontend/.next/
+frontend/out/
 
-node_modules/
-frontend/node_modules/
-.env
+# Archives
+*.zip
+*.tar.gz

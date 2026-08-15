@@ -18,6 +18,7 @@ from app.core.rate_limit import rate_limit_ask, rate_limit_search
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories import contract_repo
+from app.schemas.precedent import PrecedentSearchRequest, PrecedentSearchResponse
 from app.schemas.search import (
     AskContractRequest,
     AskContractResponse,
@@ -27,7 +28,7 @@ from app.schemas.search import (
     RAGContextRequest,
     RAGContextResponse,
 )
-from app.services import llm_service, retrieval_service
+from app.services import llm_service, precedent_service, retrieval_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/contracts", tags=["search"])
@@ -195,4 +196,36 @@ async def ask_contract(
         citations=grounded_answer.citations,
         retrieval_count=rag_res["chunks_count"],
         model=grounded_answer.model,
+    )
+
+
+@router.post(
+    "/{contract_id}/precedents",
+    response_model=PrecedentSearchResponse,
+    summary="Search organization precedent language for a clause or topic",
+    dependencies=[Depends(rate_limit_search())],
+)
+async def search_contract_precedents(
+    contract_id: uuid.UUID,
+    payload: PrecedentSearchRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> PrecedentSearchResponse:
+    """Find similar reviewed clause language from the organization's other contracts.
+
+    Excludes the target contract (across all its versions) so the contract's own
+    text is not returned as its own precedent.
+    Enforces PostgreSQL Row-Level Security (RLS) tenant isolation.
+    """
+    contract = await contract_repo.get_by_id(session, contract_id)
+    if contract is None:
+        raise NotFoundError("Contract not found")
+
+    return await precedent_service.find_similar_precedents(
+        session,
+        contract_id=contract.id,
+        org_id=user.org_id,
+        query=payload.query,
+        top_k=payload.top_k,
+        min_score=payload.min_score,
     )

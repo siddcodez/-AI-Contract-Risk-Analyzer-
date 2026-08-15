@@ -134,3 +134,80 @@ async def similarity_search(
     result = await session.execute(query)
     rows = result.all()
     return [(row[0], float(row[1])) for row in rows]
+
+
+async def search_precedent_chunks(
+    session: AsyncSession,
+    query_vector: list[float],
+    *,
+    exclude_contract_id: uuid.UUID | None = None,
+    top_k: int = 5,
+    min_score: float = 0.50,
+    distance_metric: str = "cosine",
+) -> list[tuple[ContractChunk, str, str, float]]:
+    """Search for similar precedent chunks across the tenant, joining with contracts.
+
+    Excludes all chunks belonging to exclude_contract_id (across all its versions)
+    so the query contract's own text is not echoed back as precedent.
+    Subject to Postgres RLS tenant isolation.
+
+    Args:
+        session: Active database session.
+        query_vector: Embedding vector of target clause text.
+        exclude_contract_id: UUID of contract to exclude from precedent pool.
+        top_k: Maximum precedent results.
+        min_score: Minimum cosine similarity score threshold.
+        distance_metric: Distance metric string.
+
+    Returns:
+        List of tuples (ContractChunk, contract_title, contract_file_name, similarity_score).
+    """
+    from app.core.config import get_settings
+    from app.models.contract import Contract
+
+    settings = get_settings()
+
+    if len(query_vector) != settings.EMBEDDING_DIMENSION:
+        raise ValueError(
+            f"Query vector dimension ({len(query_vector)}) does not match "
+            f"expected dimension ({settings.EMBEDDING_DIMENSION})"
+        )
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+    if not (0.0 <= min_score <= 1.0):
+        raise ValueError("min_score must be between 0.0 and 1.0")
+
+    metric_lower = distance_metric.lower()
+    if metric_lower == "cosine":
+        dist_expr = ContractChunk.embedding.cosine_distance(query_vector)
+    elif metric_lower == "l2":
+        dist_expr = ContractChunk.embedding.l2_distance(query_vector)
+    elif metric_lower == "inner_product":
+        dist_expr = ContractChunk.embedding.max_inner_product(query_vector)
+    else:
+        raise ValueError(f"Unsupported distance metric: '{distance_metric}'")
+
+    score_expr = 1.0 - dist_expr
+
+    query = (
+        select(
+            ContractChunk,
+            Contract.title.label("contract_title"),
+            Contract.file_name.label("contract_file_name"),
+            score_expr.label("score"),
+        )
+        .join(Contract, ContractChunk.contract_id == Contract.id)
+        .where(ContractChunk.embedding.is_not(None))
+    )
+
+    if min_score > 0.0:
+        query = query.where(score_expr >= min_score)
+
+    if exclude_contract_id is not None:
+        query = query.where(ContractChunk.contract_id != exclude_contract_id)
+
+    query = query.order_by(dist_expr.asc()).limit(top_k)
+
+    result = await session.execute(query)
+    rows = result.all()
+    return [(row[0], str(row[1]), str(row[2]), float(row[3])) for row in rows]

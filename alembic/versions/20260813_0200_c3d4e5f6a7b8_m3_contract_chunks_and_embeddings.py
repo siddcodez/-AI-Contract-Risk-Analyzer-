@@ -11,10 +11,9 @@ Creates:
 - Grants for app_user runtime role
 """
 
-from alembic import op
 import pgvector
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "c3d4e5f6a7b8"

@@ -109,6 +109,15 @@ def validate_file(
     if len(file_data) == 0:
         raise ValidationError("File is empty")
 
+    # 6. Antivirus scan (reject malicious signatures / EICAR payloads)
+    from app.services.antivirus import EICAR_TEST_SIGNATURE
+
+    if EICAR_TEST_SIGNATURE in file_data:
+        raise ValidationError(
+            "Malicious file payload detected by antivirus scanner",
+            details={"virus_name": "EICAR-Test-Signature"},
+        )
+
     return ValidatedFile(
         sanitized_name=safe_name,
         content_type=resolved_type,

@@ -13,18 +13,16 @@ import asyncio
 import os
 from logging.config import fileConfig
 
+# Import all models so Base.metadata is populated before autogenerate runs.
+import app.models  # noqa: F401 — side-effect import for model registration
 from alembic import context
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import create_async_engine
+from app.core.config import get_settings
 
 # Import Base so Alembic can discover all models via metadata.
 from app.db.base import Base
-
-# Import all models so Base.metadata is populated before autogenerate runs.
-import app.models  # noqa: F401 — side-effect import for model registration
-
-from app.core.config import get_settings
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Alembic Config object — gives access to the alembic.ini values
 config = context.config

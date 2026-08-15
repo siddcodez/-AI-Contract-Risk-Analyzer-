@@ -25,15 +25,18 @@ logger = get_logger(__name__)
 
 
 def _get_s3_client() -> Any:
-    """Create a boto3 S3 client configured for MinIO."""
+    """Create a boto3 S3 client configured for MinIO or native AWS S3."""
     settings = get_settings()
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.MINIO_ENDPOINT,
-        aws_access_key_id=settings.MINIO_ACCESS_KEY,
-        aws_secret_access_key=settings.MINIO_SECRET_KEY,
-        region_name="us-east-1",
-    )
+    client_kwargs: dict[str, Any] = {
+        "aws_access_key_id": settings.MINIO_ACCESS_KEY,
+        "aws_secret_access_key": settings.MINIO_SECRET_KEY,
+        "region_name": settings.AWS_REGION,
+        "use_ssl": settings.MINIO_USE_SSL,
+    }
+    if settings.MINIO_ENDPOINT:
+        client_kwargs["endpoint_url"] = settings.MINIO_ENDPOINT
+
+    return boto3.client("s3", **client_kwargs)
 
 
 def upload_file(

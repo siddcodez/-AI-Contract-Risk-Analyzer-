@@ -358,9 +358,19 @@ async def detect_missing_clauses(
     missing_clause_types = [c for c in expected_clauses if c not in detected_clauses]
 
     # 4. Generate deterministic records
-    # Base confidence: 0.95 if chunks exist and text was processed, 0.50 if no text was found
+    # Confidence calculation:
+    # Combines document processing completeness (chunks present) with classification coverage.
+    # Base text presence: 0.80 if version chunks exist, 0.40 if no chunks extracted.
+    # Classification bonus: up to +0.15 proportional to classified findings vs expected clauses,
+    # yielding 0.95 when document is fully chunked and analyzed, and 0.50 for unextracted text.
     has_text = len(version_chunks_text) > 0
-    confidence = 0.95 if has_text else 0.50
+    if not has_text:
+        confidence = 0.50
+    else:
+        # Document text extracted; factor in classification coverage
+        coverage_ratio = len(detected_clauses) / max(len(expected_clauses), 1)
+        # Bounded between 0.80 and 0.95 (deterministic based on extraction & classification)
+        confidence = round(min(0.80 + (0.15 * min(coverage_ratio, 1.0)), 0.95), 2)
 
     missing_items: list[dict[str, Any]] = []
     for c_type in missing_clause_types:

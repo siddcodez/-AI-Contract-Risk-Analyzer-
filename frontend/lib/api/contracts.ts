@@ -59,3 +59,55 @@ export async function uploadContract(
     body: formData,
   });
 }
+
+export async function listContractVersions(
+  contractId: string
+): Promise<import("@/types").ContractVersion[]> {
+  return apiRequest<import("@/types").ContractVersion[]>(
+    `/api/v1/contracts/${contractId}/versions`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+export interface ReportStatusResponse {
+  id: string;
+  contract_id: string;
+  version_id: string;
+  status: string;
+  storage_key?: string | null;
+  file_size?: number | null;
+  error_message?: string | null;
+  download_url?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export async function triggerReportGeneration(
+  contractId: string,
+  versionId?: string
+): Promise<{ job_id: string; status: string }> {
+  const query = versionId ? `?version_id=${encodeURIComponent(versionId)}` : "";
+  return apiRequest<{ job_id: string; status: string }>(
+    `/api/v1/contracts/${contractId}/reports/generate${query}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export async function getLatestReportStatus(
+  contractId: string,
+  versionId?: string
+): Promise<ReportStatusResponse> {
+  const query = versionId ? `?version_id=${encodeURIComponent(versionId)}` : "";
+  return apiRequest<ReportStatusResponse>(
+    `/api/v1/contracts/${contractId}/reports/latest${query}`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+

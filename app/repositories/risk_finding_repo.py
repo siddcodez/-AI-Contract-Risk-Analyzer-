@@ -47,6 +47,18 @@ async def delete_by_contract_and_version(
     await session.flush()
 
 
+async def get_by_id(
+    session: AsyncSession,
+    finding_id: uuid.UUID,
+) -> RiskFinding | None:
+    """Fetch a single risk finding by ID.
+
+    Subject to RLS.
+    """
+    result = await session.execute(select(RiskFinding).where(RiskFinding.id == finding_id))
+    return result.scalars().first()
+
+
 async def list_by_contract(
     session: AsyncSession,
     contract_id: uuid.UUID,
@@ -71,6 +83,27 @@ async def list_by_contract(
         stmt = stmt.where(RiskFinding.severity == sev_val)
 
     stmt = stmt.order_by(RiskFinding.created_at.desc()).offset(skip).limit(limit)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def list_by_contract_and_version(
+    session: AsyncSession,
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+) -> list[RiskFinding]:
+    """Fetch all risk findings for a specific contract version.
+
+    Subject to RLS.
+    """
+    stmt = (
+        select(RiskFinding)
+        .where(
+            RiskFinding.contract_id == contract_id,
+            RiskFinding.version_id == version_id,
+        )
+        .order_by(RiskFinding.created_at.asc())
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

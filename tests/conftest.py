@@ -31,12 +31,21 @@ os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
 os.environ.setdefault("MINIO_SECRET_KEY", "minioadmin")
 os.environ.setdefault("MINIO_BUCKET_NAME", "contract-documents")
 os.environ.setdefault("MINIO_USE_SSL", "False")
-os.environ.setdefault("ENVIRONMENT", "development")
+os.environ["ENVIRONMENT"] = "development"
+os.environ["RATE_LIMIT_ENABLED"] = "False"
 os.environ.setdefault("LOG_LEVEL", "DEBUG")
 os.environ.setdefault("APP_VERSION", "0.1.0")
 os.environ.setdefault("JWT_ALGORITHM", "HS256")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 os.environ.setdefault("REFRESH_TOKEN_EXPIRE_DAYS", "7")
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> None:
+    """Reset rate limiter state before each test."""
+    from app.core.rate_limit import _in_memory_store
+
+    _in_memory_store.clear()
 
 
 @pytest.fixture(autouse=True)

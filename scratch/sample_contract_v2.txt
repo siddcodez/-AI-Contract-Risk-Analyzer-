@@ -1,0 +1,21 @@
+MASTER SERVICES AGREEMENT (VERSION 2)
+
+This Master Services Agreement is entered into by and between Acme Cloud Inc. ("Provider") and Global Enterprises LLC ("Customer").
+
+1. SERVICES AND LICENSES
+Provider shall provide Customer access to the cloud analytics platform in accordance with the applicable Order Form. Provider guarantees 99.9% uptime SLA.
+
+2. INDEMNIFICATION
+Provider shall indemnify, defend, and hold harmless Customer, its officers, directors, and employees from and against any third-party claims alleging that the platform infringes any valid patent, copyright, or trademark.
+
+3. LIMITATION OF LIABILITY
+IN NO EVENT SHALL EITHER PARTY'S AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT EXCEED $1,000,000 OR THE TOTAL FEES PAID BY CUSTOMER IN THE PRIOR 24 MONTHS.
+
+4. TERM AND TERMINATION
+This Agreement commences on the Effective Date and continues for two (2) years. Either party may terminate for convenience with sixty (60) days prior written notice.
+
+5. CONFIDENTIALITY
+Each party agrees to protect the Confidential Information of the other party with the highest degree of care.
+
+6. GOVERNING LAW AND JURISDICTION
+This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to conflict of laws principles.

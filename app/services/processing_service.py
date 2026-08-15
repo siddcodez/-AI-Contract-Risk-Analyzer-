@@ -188,12 +188,23 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
                 exc_info=exc,
             )
 
+        try:
+            from app.services.websocket_manager import ws_manager
+
+            await ws_manager.broadcast_event(
+                contract_id=str(job.contract_id),
+                event_type="PROCESSING_COMPLETED",
+                data={"job_id": str(job_id), "status": "completed"},
+            )
+        except Exception as ws_err:
+            logger.warning("processing_completed_broadcast_failed", error=str(ws_err))
+
         logger.info(
             "processing_completed",
             job_id=str(job_id),
-            contract_id=str(contract.id),
+            contract_id=str(job.contract_id),
             chunks_count=len(chunks),
-            analysis_job_id=str(analysis_job.id),
+            embeddings_count=len(embeddings),
         )
         return job
 
@@ -201,19 +212,33 @@ async def process_contract(session: AsyncSession, job_id: uuid.UUID) -> Processi
         logger.error(
             "processing_failed",
             job_id=str(job_id),
+            contract_id=str(job.contract_id) if job else "unknown",
             exc_info=exc,
         )
         await session.rollback()
 
-        # Update status to failed safely
+        # Update job and contract status to failed in a fresh transaction
         await set_tenant_context(session, str(job.org_id))
         safe_error = _format_safe_error(exc)
-
         await processing_job_repo.update_status(
-            session, job_id, JobStatus.failed, error_message=safe_error
+            session,
+            job_id,
+            JobStatus.failed,
+            error_message=safe_error,
         )
         await contract_repo.update_status(session, job.contract_id, ContractStatus.failed)
         await session.commit()
+
+        try:
+            from app.services.websocket_manager import ws_manager
+
+            await ws_manager.broadcast_event(
+                contract_id=str(job.contract_id),
+                event_type="PROCESSING_FAILED",
+                data={"job_id": str(job_id), "status": "failed", "error": safe_error},
+            )
+        except Exception as ws_fail_err:
+            logger.warning("processing_failed_broadcast_failed", error=str(ws_fail_err))
 
         raise
 

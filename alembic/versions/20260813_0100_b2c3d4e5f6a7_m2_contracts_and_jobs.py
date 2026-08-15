@@ -14,10 +14,9 @@ Creates:
 - Grants for the app_user runtime role
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision = "b2c3d4e5f6a7"
@@ -29,13 +28,19 @@ depends_on = None
 def upgrade() -> None:
     # --- Enum types ----------------------------------------------------------
     contract_status = sa.Enum(
-        "pending", "processing", "completed", "failed",
+        "pending",
+        "processing",
+        "completed",
+        "failed",
         name="contract_status",
     )
     contract_status.create(op.get_bind(), checkfirst=True)
 
     job_status = sa.Enum(
-        "queued", "processing", "completed", "failed",
+        "queued",
+        "processing",
+        "completed",
+        "failed",
         name="job_status",
     )
     job_status.create(op.get_bind(), checkfirst=True)
@@ -49,12 +54,18 @@ def upgrade() -> None:
         sa.Column("file_size", sa.Integer, nullable=False),
         sa.Column("content_type", sa.String(255), nullable=False),
         sa.Column(
-            "storage_key", sa.String(1024), nullable=False, unique=True,
+            "storage_key",
+            sa.String(1024),
+            nullable=False,
+            unique=True,
         ),
         sa.Column(
             "status",
             postgresql.ENUM(
-                "pending", "processing", "completed", "failed",
+                "pending",
+                "processing",
+                "completed",
+                "failed",
                 name="contract_status",
                 create_type=False,
             ),
@@ -133,7 +144,10 @@ def upgrade() -> None:
         sa.Column(
             "status",
             postgresql.ENUM(
-                "queued", "processing", "completed", "failed",
+                "queued",
+                "processing",
+                "completed",
+                "failed",
                 name="job_status",
                 create_type=False,
             ),
@@ -178,16 +192,12 @@ def upgrade() -> None:
 
     # --- Grants for app_user -------------------------------------------------
     for table in ("contracts", "contract_versions", "processing_jobs"):
-        op.execute(
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO app_user"
-        )
+        op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO app_user")
 
 
 def downgrade() -> None:
     for table in ("contracts", "contract_versions", "processing_jobs"):
-        op.execute(
-            f"REVOKE ALL ON {table} FROM app_user"
-        )
+        op.execute(f"REVOKE ALL ON {table} FROM app_user")
 
     for table in ("processing_jobs", "contract_versions", "contracts"):
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")

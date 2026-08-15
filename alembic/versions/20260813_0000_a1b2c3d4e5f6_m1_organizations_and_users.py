@@ -13,10 +13,9 @@ Creates:
 - Grants for the app_user runtime role
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision = "a1b2c3d4e5f6"
@@ -35,12 +34,8 @@ def upgrade() -> None:
         "organizations",
         sa.Column("id", sa.Uuid, primary_key=True),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column(
-            "slug", sa.String(255), nullable=False, unique=True, index=True
-        ),
-        sa.Column(
-            "is_active", sa.Boolean, nullable=False, server_default="true"
-        ),
+        sa.Column("slug", sa.String(255), nullable=False, unique=True, index=True),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -59,9 +54,7 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.Uuid, primary_key=True),
-        sa.Column(
-            "email", sa.String(320), nullable=False, unique=True, index=True
-        ),
+        sa.Column("email", sa.String(320), nullable=False, unique=True, index=True),
         sa.Column("password_hash", sa.String(1024), nullable=False),
         sa.Column("full_name", sa.String(255), nullable=False),
         sa.Column(
@@ -83,9 +76,7 @@ def upgrade() -> None:
             nullable=False,
             index=True,
         ),
-        sa.Column(
-            "is_active", sa.Boolean, nullable=False, server_default="true"
-        ),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -117,7 +108,10 @@ def upgrade() -> None:
         """
         CREATE POLICY tenant_isolation ON users
             FOR ALL
-            USING (org_id::text = current_setting('app.current_org_id', true))
+            USING (
+                (org_id::text = current_setting('app.current_org_id', true))
+                OR (current_setting('app.is_auth_lookup', true) = 'true')
+            )
             WITH CHECK (org_id::text = current_setting('app.current_org_id', true))
         """
     )
@@ -125,8 +119,8 @@ def upgrade() -> None:
     # --- SECURITY DEFINER function for login ---------------------------------
     #
     # Login must look up a user by email across ALL organisations.
-    # This function runs as the table owner (contract_user) which
-    # bypasses RLS, allowing the auth flow to find the user.
+    # This function runs as the table owner (contract_user) with app.is_auth_lookup
+    # context, which allows the email-based lookup while keeping FORCE RLS active.
     #
     # Only the email-based lookup is exposed — no generic RLS bypass.
 
@@ -144,16 +138,20 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ,
             updated_at TIMESTAMPTZ
         )
-        LANGUAGE sql
+        LANGUAGE plpgsql
         SECURITY DEFINER
         SET search_path = public
         AS $$
+        BEGIN
+            PERFORM set_config('app.is_auth_lookup', 'true', true);
+            RETURN QUERY
             SELECT u.id, u.email, u.password_hash, u.full_name,
                    u.role, u.org_id, u.is_active, u.created_at, u.updated_at
             FROM users u
             WHERE u.email = p_email AND u.is_active = true
             LIMIT 1;
-        $$
+        END;
+        $$;
         """
     )
 
@@ -165,15 +163,11 @@ def upgrade() -> None:
 
     op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON organizations TO app_user")
     op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_user")
-    op.execute(
-        "GRANT EXECUTE ON FUNCTION auth_get_user_by_email(TEXT) TO app_user"
-    )
+    op.execute("GRANT EXECUTE ON FUNCTION auth_get_user_by_email(TEXT) TO app_user")
 
 
 def downgrade() -> None:
-    op.execute(
-        "REVOKE EXECUTE ON FUNCTION auth_get_user_by_email(TEXT) FROM app_user"
-    )
+    op.execute("REVOKE EXECUTE ON FUNCTION auth_get_user_by_email(TEXT) FROM app_user")
     op.execute("REVOKE ALL ON users FROM app_user")
     op.execute("REVOKE ALL ON organizations FROM app_user")
 

@@ -30,6 +30,18 @@ export interface Contract {
   updated_at: string;
 }
 
+export interface ContractVersion {
+  id: string;
+  contract_id: string;
+  version_number: number;
+  file_name: string;
+  file_size: number;
+  content_type: string;
+  storage_key: string;
+  org_id: string;
+  created_at: string;
+}
+
 export interface ContractListResponse {
   contracts: Contract[];
   total: number;
@@ -87,6 +99,7 @@ export interface RiskFinding {
   evidence: string;
   recommendation: string;
   confidence: number;
+  status?: string;
   metadata_json?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -185,14 +198,102 @@ export interface AskContractResponse {
   model: string;
 }
 
+export type ClauseChangeType = "added" | "removed" | "modified" | "unchanged";
+
+export interface ClauseDiffItem {
+  clause_type: string;
+  display_name: string;
+  change_type: ClauseChangeType;
+  from_text: string | null;
+  to_text: string | null;
+  from_severity: string | null;
+  to_severity: string | null;
+  ai_explanation: string | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface ContractComparisonResponse {
+  id: string;
+  contract_id: string;
+  from_version_id: string;
+  to_version_id: string;
+  from_version_number?: number | null;
+  to_version_number?: number | null;
+  risk_score_from: number;
+  risk_score_to: number;
+  risk_delta: number;
+  clauses_added_count: number;
+  clauses_removed_count: number;
+  clauses_modified_count: number;
+  clauses_unchanged_count: number;
+  diff_items: ClauseDiffItem[];
+  created_at: string;
+  updated_at: string;
+  disclaimer: string;
+}
+
+export interface Precedent {
+  id: string;
+  title: string;
+  clause_type: string;
+  text: string;
+  source_contract_id?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface ReviewAction {
+  id: string;
+  contract_id: string;
+  finding_id: string;
+  reviewer_id?: string | null;
+  org_id: string;
+  action: "approved" | "rejected";
+  comment?: string | null;
+  created_at: string;
+}
+
+export interface ReviewActionListResponse {
+  items: ReviewAction[];
+  total: number;
+}
+
+export interface AuditLog {
+  id: string;
+  org_id: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  metadata_json: Record<string, unknown>;
+  ip_address?: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLog[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
 export interface ApiErrorDetail {
   loc?: (string | number)[];
   msg: string;
-  type: string;
+  type?: string;
 }
 
 export interface ApiErrorResponse {
   detail?: string | ApiErrorDetail[];
   message?: string;
   request_id?: string;
+  error?: {
+    code: string;
+    message: string;
+    request_id?: string;
+    details?: {
+      errors?: ApiErrorDetail[];
+      [key: string]: unknown;
+    };
+  };
 }

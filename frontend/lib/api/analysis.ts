@@ -64,3 +64,65 @@ export async function getFindingsSummary(
     }
   );
 }
+
+export async function getMissingClauses(
+  contractId: string,
+  versionId?: string
+): Promise<import("@/types").MissingClauseListResponse> {
+  const queryStr = versionId ? `?version_id=${encodeURIComponent(versionId)}` : "";
+  return apiRequest<import("@/types").MissingClauseListResponse>(
+    `/api/v1/contracts/${contractId}/missing-clauses${queryStr}`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+export async function compareVersions(
+  contractId: string,
+  fromVersionId: string,
+  toVersionId: string,
+  refresh: boolean = false
+): Promise<import("@/types").ContractComparisonResponse> {
+  const params = new URLSearchParams({
+    from_version_id: fromVersionId,
+    to_version_id: toVersionId,
+    refresh: refresh.toString(),
+  });
+  return apiRequest<import("@/types").ContractComparisonResponse>(
+    `/api/v1/contracts/${contractId}/compare?${params.toString()}`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+export async function submitFindingReview(
+  contractId: string,
+  findingId: string,
+  action: "approved" | "rejected",
+  comment?: string
+): Promise<import("@/types").ReviewAction> {
+  return apiRequest<import("@/types").ReviewAction>(
+    `/api/v1/contracts/${contractId}/findings/${findingId}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, comment }),
+    }
+  );
+}
+
+export async function listFindingReviews(
+  contractId: string,
+  findingId: string
+): Promise<import("@/types").ReviewActionListResponse> {
+  return apiRequest<import("@/types").ReviewActionListResponse>(
+    `/api/v1/contracts/${contractId}/findings/${findingId}/reviews`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+
+

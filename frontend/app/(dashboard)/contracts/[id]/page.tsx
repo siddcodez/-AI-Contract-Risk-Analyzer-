@@ -10,6 +10,7 @@ import {
   getFindingsSummary,
   listFindings,
   triggerAnalysis,
+  getMissingClauses,
 } from "@/lib/api/analysis";
 import { useAuth } from "@/lib/auth/store";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   ShieldAlert,
   ClipboardCheck,
   ChevronRight,
+  FileDown,
 } from "lucide-react";
 
 export default function ContractDetailPage() {
@@ -95,6 +97,13 @@ export default function ContractDetailPage() {
     enabled: !!contractId,
   });
 
+  // 6. Missing Clauses Preview Query
+  const { data: missingData, isLoading: isLoadingMissing } = useQuery({
+    queryKey: ["missing-clauses-preview", contractId],
+    queryFn: () => getMissingClauses(contractId),
+    enabled: !!contractId,
+  });
+
   // Trigger Analysis Mutation
   const analyzeMutation = useMutation({
     mutationFn: () => triggerAnalysis(contractId),
@@ -102,6 +111,7 @@ export default function ContractDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["contract-analysis", contractId] });
       queryClient.invalidateQueries({ queryKey: ["findings-summary", contractId] });
       queryClient.invalidateQueries({ queryKey: ["findings-preview", contractId] });
+      queryClient.invalidateQueries({ queryKey: ["missing-clauses-preview", contractId] });
       refetchAnalysis();
     },
   });
@@ -177,6 +187,17 @@ export default function ContractDetailPage() {
               <span>Search Contract</span>
             </Button>
           </Link>
+
+          <a
+            href={`/api/v1/contracts/${contractId}/reports/download`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Button variant="secondary" className="gap-2 h-10 text-xs font-semibold">
+              <FileDown className="w-3.5 h-3.5 text-primary" />
+              <span>Download PDF</span>
+            </Button>
+          </a>
 
           {isReviewerOrAdmin && (
             <Button
@@ -343,6 +364,16 @@ export default function ContractDetailPage() {
                   <span>Ask Document (RAG)</span>
                 </Button>
               </Link>
+
+              <Link href={`/contracts/${contractId}/compare`}>
+                <Button
+                  variant="secondary"
+                  className="w-full text-xs font-semibold gap-2 justify-center"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-secondary" />
+                  <span>Compare Versions</span>
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -484,30 +515,49 @@ export default function ContractDetailPage() {
               </div>
             </div>
 
-            {/* Recommendations quick list */}
-            <div>
-              <span className="text-xs font-semibold text-on-surface-variant block mb-2">
-                Key Recommendations
-              </span>
-              <ul className="flex flex-col gap-2 text-xs text-on-surface">
-                {findings.filter((f) => f.recommendation).slice(0, 3).length > 0 ? (
-                  findings
-                    .filter((f) => f.recommendation)
-                    .slice(0, 3)
-                    .map((f) => (
-                      <li key={f.id} className="flex items-start gap-1.5">
-                        <ChevronRight className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                        <span className="line-clamp-2 text-on-surface-variant">
-                          {f.recommendation}
-                        </span>
-                      </li>
-                    ))
-                ) : (
-                  <li className="text-on-surface-variant text-[11px]">
-                    No recommendations recorded yet.
-                  </li>
-                )}
-              </ul>
+            {/* Missing Clauses Card */}
+            <div className="border-t border-outline-variant pt-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-[#ea580c]" />
+                  <span className="text-xs font-bold text-on-surface">
+                    Missing Clauses ({missingData?.total ?? 0})
+                  </span>
+                </div>
+                <Link
+                  href={`/contracts/${contractId}/analysis`}
+                  className="text-[11px] font-semibold text-primary hover:underline"
+                >
+                  View
+                </Link>
+              </div>
+
+              {isLoadingMissing ? (
+                <Skeleton className="h-10 w-full rounded-lg" />
+              ) : (missingData?.items.length ?? 0) === 0 ? (
+                <p className="text-[11px] text-emerald-400 font-medium">
+                  ✓ All standard expected clauses detected.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {missingData?.items.slice(0, 3).map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-surface-container-high/40 border border-[#ea580c]/20 rounded-md px-2.5 py-1.5 flex items-center justify-between text-xs"
+                    >
+                      <span className="capitalize font-medium text-on-surface truncate">
+                        {item.clause_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-[10px] font-mono font-semibold text-[#ea580c] bg-[#ea580c]/10 px-1.5 py-0.5 rounded">
+                        {(item.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-on-surface-variant italic mt-0.5">
+                    Not legal advice. Deterministic baseline check.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

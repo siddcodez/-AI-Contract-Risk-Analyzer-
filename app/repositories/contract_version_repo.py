@@ -56,3 +56,32 @@ async def list_by_contract(
         .order_by(ContractVersion.version_number)
     )
     return list(result.scalars().all())
+
+
+async def get_by_id(
+    session: AsyncSession,
+    version_id: uuid.UUID,
+) -> ContractVersion | None:
+    """Fetch a contract version by ID.
+
+    Subject to RLS.
+    """
+    result = await session.execute(select(ContractVersion).where(ContractVersion.id == version_id))
+    return result.scalars().first()
+
+
+async def get_latest_by_contract(
+    session: AsyncSession,
+    contract_id: uuid.UUID,
+) -> ContractVersion | None:
+    """Fetch the latest version for a contract by version_number.
+
+    Subject to RLS.
+    """
+    result = await session.execute(
+        select(ContractVersion)
+        .where(ContractVersion.contract_id == contract_id)
+        .order_by(ContractVersion.version_number.desc())
+        .limit(1)
+    )
+    return result.scalars().first()

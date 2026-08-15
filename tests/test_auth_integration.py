@@ -32,7 +32,7 @@ _ADMIN_URL = os.environ.get(
 
 # App URL — subject to RLS (non-superuser, no BYPASSRLS)
 _APP_URL = os.environ.get(
-    "DATABASE_URL",
+    "APP_DATABASE_URL",
     "postgresql+asyncpg://app_user:app_pass@localhost:5432/contract_risk_db",
 )
 
@@ -180,7 +180,7 @@ class TestRLSEnforcement:
             # --- Assert: app_user with Org A context ---
             # Set tenant context to Org A
             await app_session.execute(
-                text("SELECT set_config('app.current_org_id', :org_id, true)"),
+                text("SELECT set_config('app.current_org_id', :org_id, false)"),
                 {"org_id": str(org_a_id)},
             )
 
@@ -188,15 +188,13 @@ class TestRLSEnforcement:
             rows_a = result_a.fetchall()
 
             # Should ONLY see User A
-            visible_ids_a = {row[0] for row in rows_a}
+            visible_ids_a = {uuid.UUID(str(row[0])) for row in rows_a}
             assert user_a_id in visible_ids_a, "User A should be visible when tenant is Org A"
             assert user_b_id not in visible_ids_a, "User B must NOT be visible when tenant is Org A"
 
-            await app_session.rollback()  # reset SET LOCAL
-
             # --- Assert: app_user with Org B context ---
             await app_session.execute(
-                text("SELECT set_config('app.current_org_id', :org_id, true)"),
+                text("SELECT set_config('app.current_org_id', :org_id, false)"),
                 {"org_id": str(org_b_id)},
             )
 
@@ -204,19 +202,18 @@ class TestRLSEnforcement:
             rows_b = result_b.fetchall()
 
             # Should ONLY see User B
-            visible_ids_b = {row[0] for row in rows_b}
+            visible_ids_b = {uuid.UUID(str(row[0])) for row in rows_b}
             assert user_b_id in visible_ids_b, "User B should be visible when tenant is Org B"
             assert user_a_id not in visible_ids_b, "User A must NOT be visible when tenant is Org B"
 
-            await app_session.rollback()
-
             # --- Assert: no context → no rows visible ---
-            # Start a fresh transaction without setting any org context
+            # Reset context setting to empty
+            await app_session.execute(text("SELECT set_config('app.current_org_id', '', false)"))
             result_no_ctx = await app_session.execute(text("SELECT id FROM users"))
             rows_no_ctx = result_no_ctx.fetchall()
 
             # Without context, current_setting returns '' which matches no UUID
-            no_ctx_ids = {row[0] for row in rows_no_ctx}
+            no_ctx_ids = {uuid.UUID(str(row[0])) for row in rows_no_ctx}
             assert user_a_id not in no_ctx_ids, "User A must NOT be visible without tenant context"
             assert user_b_id not in no_ctx_ids, "User B must NOT be visible without tenant context"
 

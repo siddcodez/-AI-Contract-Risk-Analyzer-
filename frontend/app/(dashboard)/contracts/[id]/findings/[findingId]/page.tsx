@@ -3,9 +3,10 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { listFindings } from "@/lib/api/analysis";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { listFindings, submitFindingReview, listFindingReviews } from "@/lib/api/analysis";
 import { getContractDetails } from "@/lib/api/contracts";
+import { useAuth } from "@/lib/auth/store";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +18,8 @@ import {
   CheckCircle2,
   Copy,
   Info,
+  ShieldAlert,
+  XCircle,
 } from "lucide-react";
 
 export default function FindingDetailPage() {
@@ -24,6 +27,8 @@ export default function FindingDetailPage() {
   const contractId = params.id as string;
   const findingId = params.findingId as string;
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
+  const isReviewerOrAdmin = user?.role === "admin" || user?.role === "reviewer";
 
   // Contract Details
   const { data: contract } = useQuery({
@@ -183,7 +188,150 @@ export default function FindingDetailPage() {
             {finding.recommendation}
           </div>
         </section>
+
+        {/* Section 4: Human Review & Decision Workflow (Phase 11) */}
+        <ReviewDecisionSection
+          contractId={contractId}
+          findingId={findingId}
+          currentStatus={finding.status || "pending_review"}
+          isReviewerOrAdmin={isReviewerOrAdmin}
+        />
       </div>
     </div>
   );
 }
+
+function ReviewDecisionSection({
+  contractId,
+  findingId,
+  currentStatus,
+  isReviewerOrAdmin,
+}: {
+  contractId: string;
+  findingId: string;
+  currentStatus: string;
+  isReviewerOrAdmin: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [comment, setComment] = useState("");
+  const [status, setStatus] = useState(currentStatus);
+
+  const { data: reviewsData } = useQuery({
+    queryKey: ["finding-reviews", contractId, findingId],
+    queryFn: () => listFindingReviews(contractId, findingId),
+    enabled: !!contractId && !!findingId,
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: (action: "approved" | "rejected") =>
+      submitFindingReview(contractId, findingId, action, comment || undefined),
+    onSuccess: (newReview) => {
+      setStatus(newReview.action);
+      setComment("");
+      queryClient.invalidateQueries({ queryKey: ["findings", contractId] });
+      queryClient.invalidateQueries({ queryKey: ["finding-reviews", contractId, findingId] });
+    },
+  });
+
+  const isApproved = status === "approved";
+  const isRejected = status === "rejected";
+
+  return (
+    <section className="bg-surface-container-low p-6 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.4)] border border-outline-variant/50 flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-primary" />
+          <span>Reviewer Decision & Signoff</span>
+        </h2>
+        <span
+          className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
+            isApproved
+              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+              : isRejected
+              ? "bg-red-500/15 text-red-400 border border-red-500/30"
+              : "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30"
+          }`}
+        >
+          {status.replace("_", " ")}
+        </span>
+      </div>
+
+      {isReviewerOrAdmin ? (
+        <div className="flex flex-col gap-3">
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add reviewer notes or mitigation justification (optional)..."
+            rows={2}
+            className="w-full bg-surface-container-high border border-outline-variant rounded-lg p-3 text-xs text-on-surface focus:outline-none focus:border-primary resize-none"
+          />
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              isLoading={reviewMutation.isPending && reviewMutation.variables === "approved"}
+              onClick={() => reviewMutation.mutate("approved")}
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Approve Finding</span>
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={reviewMutation.isPending && reviewMutation.variables === "rejected"}
+              onClick={() => reviewMutation.mutate("rejected")}
+              className="gap-1.5 border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-bold"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Reject / Dismiss</span>
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-on-surface-variant italic">
+          You are viewing this contract in read-only mode. Reviewer or Admin role is required to submit signoffs.
+        </p>
+      )}
+
+      {/* Review History Trail */}
+      {reviewsData && reviewsData.items.length > 0 && (
+        <div className="border-t border-outline-variant/40 pt-3 flex flex-col gap-2">
+          <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+            Review History ({reviewsData.total})
+          </span>
+          <div className="flex flex-col gap-2">
+            {reviewsData.items.map((rev) => (
+              <div
+                key={rev.id}
+                className="bg-surface-container-high/40 border border-outline-variant/30 rounded-lg p-2.5 flex flex-col gap-1 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold capitalize text-on-surface flex items-center gap-1.5">
+                    {rev.action === "approved" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                    )}
+                    {rev.action}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-mono">
+                    {new Date(rev.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {rev.comment && (
+                  <p className="text-on-surface-variant text-[11px] italic pl-5">
+                    &ldquo;{rev.comment}&rdquo;
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+

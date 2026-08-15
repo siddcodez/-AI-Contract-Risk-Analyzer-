@@ -244,6 +244,44 @@ async def analyze_contract(
 
         await session.commit()
 
+        # Real-time WebSocket broadcast & Notification dispatch
+        try:
+            from app.services.notification_service import (
+                NotificationEvent,
+                NotificationType,
+                notification_service,
+            )
+            from app.services.websocket_manager import ws_manager
+
+            cid_str = str(job.contract_id)
+            await ws_manager.broadcast_event(
+                contract_id=cid_str,
+                event_type="ANALYSIS_COMPLETED",
+                data={
+                    "job_id": str(analysis_job_id),
+                    "status": "completed",
+                    "findings_count": len(findings_rows),
+                },
+            )
+
+            # Check for high-risk findings to alert
+            has_high_risk = any(f.get("severity") in ("high", "critical") for f in findings_rows)
+            if has_high_risk:
+                await notification_service.dispatch(
+                    NotificationEvent(
+                        event_type=NotificationType.HIGH_RISK_FINDING_DETECTED,
+                        contract_id=cid_str,
+                        contract_title=getattr(contract_obj, "title", "Contract"),
+                        org_id=str(job.org_id),
+                        summary=(
+                            f"Detected {len(findings_rows)} risk finding(s) "
+                            "with high/critical severity."
+                        ),
+                    )
+                )
+        except Exception as ws_err:
+            logger.warning("event_broadcast_failed_non_fatal", error=str(ws_err))
+
         logger.info(
             "analysis_completed",
             analysis_job_id=str(analysis_job_id),
@@ -270,6 +308,17 @@ async def analyze_contract(
             error_message=safe_error,
         )
         await session.commit()
+
+        try:
+            from app.services.websocket_manager import ws_manager
+
+            await ws_manager.broadcast_event(
+                contract_id=str(job.contract_id),
+                event_type="ANALYSIS_FAILED",
+                data={"job_id": str(analysis_job_id), "status": "failed", "error": safe_error},
+            )
+        except Exception as ws_fail_err:
+            logger.warning("analysis_failed_broadcast_failed", error=str(ws_fail_err))
 
         raise
 

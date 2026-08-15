@@ -55,7 +55,11 @@ def process_contract_job(self: Task, job_id: str, request_id: str | None = None)
     settings = get_settings()
 
     async def _run() -> None:
-        db_url = os.environ.get("MIGRATION_DATABASE_URL") or settings.DATABASE_URL
+        db_url = (
+            settings.MIGRATION_DATABASE_URL
+            or os.environ.get("MIGRATION_DATABASE_URL")
+            or settings.DATABASE_URL
+        )
         engine = create_async_engine(db_url)
         async_session_factory = async_sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
@@ -164,7 +168,11 @@ def analyze_contract_job(
     settings = get_settings()
 
     async def _run() -> None:
-        db_url = os.environ.get("MIGRATION_DATABASE_URL") or settings.DATABASE_URL
+        db_url = (
+            settings.MIGRATION_DATABASE_URL
+            or os.environ.get("MIGRATION_DATABASE_URL")
+            or settings.DATABASE_URL
+        )
         engine = create_async_engine(db_url)
         async_session_factory = async_sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
@@ -245,5 +253,71 @@ def analyze_contract_job(
                 "status": "failed",
                 "error": str(exc),
             }
+    finally:
+        clear_correlation_context()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    bind=True,
+    name="app.workers.tasks.generate_contract_report_job",
+    max_retries=2,
+    default_retry_delay=5,
+)
+def generate_contract_report_job(
+    self: Task,
+    job_id: str,
+    user_id: str | None = None,
+    user_email: str | None = None,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Celery worker task to asynchronously generate and store a contract PDF report.
+
+    Args:
+        job_id: UUID string of the ReportJob.
+        user_id: ID of the user requesting the report.
+        user_email: Email of the requesting user.
+        request_id: Optional correlation ID.
+    """
+    task_id = getattr(getattr(self, "request", None), "id", None) or str(uuid.uuid4())
+    _ = set_correlation_context(request_id=request_id, job_id=job_id)
+    logger.info("Starting generate_contract_report_job", job_id=job_id, task_id=task_id)
+    report_job_uuid = uuid.UUID(job_id)
+    user_uuid = uuid.UUID(user_id) if user_id else None
+    settings = get_settings()
+
+    async def _run() -> None:
+        db_url = (
+            settings.MIGRATION_DATABASE_URL
+            or os.environ.get("MIGRATION_DATABASE_URL")
+            or settings.DATABASE_URL
+        )
+        engine = create_async_engine(db_url)
+        async_session_factory = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        async with async_session_factory() as session:
+            from app.services import report_service
+
+            await report_service.execute_report_generation(
+                session,
+                job_id=report_job_uuid,
+                user_id=user_uuid,
+                user_email=user_email,
+            )
+        await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+        return {"job_id": job_id, "task_id": task_id, "status": "completed"}
+    except Exception as exc:
+        logger.error(
+            "Unexpected error in generate_contract_report_job",
+            job_id=job_id,
+            task_id=task_id,
+            exc_info=exc,
+        )
+        return {"job_id": job_id, "task_id": task_id, "status": "failed", "error": str(exc)}
     finally:
         clear_correlation_context()

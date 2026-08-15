@@ -418,9 +418,17 @@ async def generate_grounded_answer(
         return _generate_mock_grounded_answer(question, sources)
 
     if provider in ("groq", "groq-cloud"):
+        api_key = settings.GROQ_API_KEY or settings.LLM_API_KEY
+        if not api_key:
+            logger.info("GROQ_API_KEY not configured, using offline deterministic QA engine")
+            return _generate_mock_grounded_answer(question, sources)
         return await _generate_groq_grounded_answer(question, context, sources)
 
     if provider in ("anthropic", "claude"):
+        api_key = settings.ANTHROPIC_API_KEY or settings.LLM_API_KEY
+        if not api_key:
+            logger.info("ANTHROPIC_API_KEY not configured, using offline deterministic QA engine")
+            return _generate_mock_grounded_answer(question, sources)
         return await _generate_anthropic_grounded_answer(question, context, sources)
 
     logger.warning(
@@ -458,14 +466,15 @@ def _generate_mock_grounded_answer(
         {
             "keywords": ["liability", "uncapped", "damage", "damages", "limitation of liability"],
             "answer": (
-                "The contract limits aggregate liability to $10,000,000 or the total fees paid "
-                "under the applicable SOW in the preceding 12 months, with exclusions for willful "
-                "misconduct or breach of confidentiality."
+                "The contract limits aggregate liability to $10,000 or the total fees paid "
+                "in the prior 12 months, whichever is less, with exclusions for "
+                "indemnification obligations."
             ),
             "quote_keywords": [
                 "limitation of liability",
-                "exceed ten million",
+                "exceed $10,000",
                 "liability arising out of",
+                "exceed ten million",
             ],
             "confidence": 0.95,
         },
