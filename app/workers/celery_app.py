@@ -19,8 +19,8 @@ settings = get_settings()
 
 celery_app = Celery(
     "contract_risk",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=settings.CELERY_BROKER_URL or settings.REDIS_URL,
+    backend=settings.CELERY_RESULT_BACKEND or settings.REDIS_URL,
     include=[
         "app.workers.tasks",
     ],

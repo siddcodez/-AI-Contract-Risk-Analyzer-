@@ -13,9 +13,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import boto3
 import redis.asyncio as aioredis
-from botocore.exceptions import ClientError
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -28,6 +26,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.db.session import close_db, init_db
 from app.middleware.request_id import RequestIDMiddleware
+from app.services.storage_service import _get_supabase_client
 
 # Configure structured logging before anything else logs
 configure_logging()
@@ -63,26 +62,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Redis connection failed at startup", exc_info=exc)
         raise
 
-    # 3. Ensure MinIO bucket exists (create if absent — idempotent)
+    # 3. Ensure Supabase Storage bucket exists (create if absent — idempotent)
     try:
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=settings.MINIO_ENDPOINT,
-            aws_access_key_id=settings.MINIO_ACCESS_KEY,
-            aws_secret_access_key=settings.MINIO_SECRET_KEY,
-            region_name="us-east-1",
-        )
+        supabase_client = _get_supabase_client()
         try:
-            s3.head_bucket(Bucket=settings.MINIO_BUCKET_NAME)
-            logger.info("Object storage bucket verified", bucket=settings.MINIO_BUCKET_NAME)
-        except ClientError as exc:
-            if exc.response["Error"]["Code"] in ("404", "NoSuchBucket"):
-                s3.create_bucket(Bucket=settings.MINIO_BUCKET_NAME)
-                logger.info("Object storage bucket created", bucket=settings.MINIO_BUCKET_NAME)
-            else:
-                raise
+            supabase_client.storage.get_bucket(settings.SUPABASE_STORAGE_BUCKET)
+            logger.info(
+                "Supabase storage bucket verified",
+                bucket=settings.SUPABASE_STORAGE_BUCKET,
+            )
+        except Exception:
+            try:
+                supabase_client.storage.create_bucket(
+                    settings.SUPABASE_STORAGE_BUCKET,
+                    options={"public": False},
+                )
+                logger.info(
+                    "Supabase storage bucket created",
+                    bucket=settings.SUPABASE_STORAGE_BUCKET,
+                )
+            except Exception as create_exc:
+                logger.warning(
+                    "Supabase storage bucket creation check warning",
+                    bucket=settings.SUPABASE_STORAGE_BUCKET,
+                    exc_info=create_exc,
+                )
     except Exception as exc:
-        logger.error("Object storage check failed at startup", exc_info=exc)
+        logger.error("Supabase storage check failed at startup", exc_info=exc)
         raise
 
     logger.info("Startup complete — ready to serve requests")

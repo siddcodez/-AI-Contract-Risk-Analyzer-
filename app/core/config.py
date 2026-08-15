@@ -12,7 +12,7 @@ Usage:
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +32,11 @@ class Settings(BaseSettings):
         default="development"
     )
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
-    SECRET_KEY: str = Field(min_length=32)
+    SECRET_KEY: str = Field(
+        validation_alias=AliasChoices("SECRET_KEY", "JWT_SECRET"),
+        min_length=32,
+        description="JWT Secret key (supports SECRET_KEY or JWT_SECRET)",
+    )
 
     # ---- PostgreSQL ---------------------------------------------------------
     DATABASE_URL: str = Field(
@@ -46,20 +50,25 @@ class Settings(BaseSettings):
     # ---- Redis --------------------------------------------------------------
     REDIS_URL: str = Field(description="Redis connection URL: redis://host:port/db")
 
-    # ---- MinIO / S3 ---------------------------------------------------------
-    MINIO_ENDPOINT: str | None = Field(
-        default=None,
-        description="Full URL including scheme: http://host:port (None for native AWS S3)",
+    # ---- Supabase Storage ---------------------------------------------------
+    SUPABASE_URL: str = Field(description="Supabase project URL (e.g. https://xyz.supabase.co)")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(
+        description="Supabase service role key for backend storage operations"
     )
-    MINIO_ACCESS_KEY: str
-    MINIO_SECRET_KEY: str
-    MINIO_BUCKET_NAME: str = Field(default="contract-documents")
-    MINIO_USE_SSL: bool = Field(default=False)
-    AWS_REGION: str = Field(default="us-east-1", description="AWS Region for S3")
+    SUPABASE_STORAGE_BUCKET: str = Field(
+        default="contract-documents",
+        description="Supabase storage bucket name for contract documents",
+    )
 
     # ---- Celery -------------------------------------------------------------
-    CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
-    CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
+    CELERY_BROKER_URL: str | None = Field(
+        default=None,
+        description="Celery broker URL (defaults to REDIS_URL if unset)",
+    )
+    CELERY_RESULT_BACKEND: str | None = Field(
+        default=None,
+        description="Celery result backend URL (defaults to REDIS_URL if unset)",
+    )
 
     # ---- File Upload & Chunking ---------------------------------------------
     MAX_FILE_SIZE_MB: int = Field(default=50, ge=1, description="Maximum upload file size in MB")
@@ -141,31 +150,62 @@ class Settings(BaseSettings):
     MAX_PAGE_SIZE: int = Field(default=100, ge=1, le=500)
     DEFAULT_PAGE_SIZE: int = Field(default=20, ge=1, le=100)
 
-    @field_validator("DATABASE_URL")
+    @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
-        if not v.startswith("postgresql+asyncpg://"):
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if not isinstance(v, str) or not v.startswith("postgresql+asyncpg://"):
             raise ValueError(
                 "DATABASE_URL must use the postgresql+asyncpg:// scheme for async support"
             )
         return v
 
+    @field_validator("MIGRATION_DATABASE_URL", mode="before")
+    @classmethod
+    def validate_migration_database_url(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @model_validator(mode="after")
+    def resolve_celery_defaults(self) -> "Settings":
+        """Default Celery URLs to REDIS_URL if not explicitly set."""
+        if not self.CELERY_BROKER_URL:
+            self.CELERY_BROKER_URL = self.REDIS_URL
+        if not self.CELERY_RESULT_BACKEND:
+            self.CELERY_RESULT_BACKEND = self.REDIS_URL
+        return self
+
     @model_validator(mode="after")
     def validate_production_config(self) -> "Settings":
         """Validate that production environment does not use insecure default secrets."""
         if self.ENVIRONMENT == "production":
-            insecure_secret_keywords = ["secret", "change-me", "dev", "default", "example"]
-            if any(kw in self.SECRET_KEY.lower() for kw in insecure_secret_keywords):
+            insecure_keywords = ["change-me", "default", "example", "dummy", "test-key"]
+            if (
+                any(kw in self.SECRET_KEY.lower() for kw in insecure_keywords)
+                or self.SECRET_KEY.lower() == "secret"
+            ):
                 raise ValueError("Insecure SECRET_KEY detected in production environment")
             if "postgres:postgres" in self.DATABASE_URL:
                 raise ValueError("Default database credentials detected in production environment")
-            if (
-                self.MINIO_ACCESS_KEY == "minioadmin" or self.MINIO_SECRET_KEY == "minioadmin"  # noqa: S105
-            ):
-                raise ValueError("Default MinIO/S3 credentials detected in production environment")
-            if self.LLM_PROVIDER != "mock" and not self.LLM_API_KEY:
+            if any(kw in self.SUPABASE_SERVICE_ROLE_KEY.lower() for kw in insecure_keywords):
                 raise ValueError(
-                    "LLM_API_KEY must be configured in production mode for provider "
+                    "Insecure SUPABASE_SERVICE_ROLE_KEY detected in production environment"
+                )
+            if (
+                self.LLM_PROVIDER not in ("mock",)
+                and not self.LLM_API_KEY
+                and not self.GROQ_API_KEY
+            ):
+                raise ValueError(
+                    f"LLM API key must be configured in production mode for provider "
                     f"'{self.LLM_PROVIDER}'"
                 )
         return self

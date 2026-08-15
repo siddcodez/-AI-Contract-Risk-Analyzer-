@@ -26,8 +26,7 @@ dependencies = [
     "celery[redis]>=5.4.0",
 
     # Object storage
-    "boto3>=1.35.0",
-    "aiobotocore>=2.15.0",
+    "supabase>=2.10.0",
 
     # Document processing & embeddings (M3)
     "pgvector>=0.3.0",
@@ -53,9 +52,6 @@ dev = [
     "ruff==0.16.2",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
-    # Type stubs
-    "types-boto3>=1.35.0",
-    "boto3-stubs[s3]>=1.35.0",
 ]
 
 # ---------------------------------------------------------------------------
@@ -103,7 +99,17 @@ ignore_missing_imports = false
 exclude = ["alembic/"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "asyncpg.*", "aiobotocore.*", "boto3.*", "botocore.*", "redis.*", "jwt.*"]
+module = [
+    "celery.*",
+    "asyncpg.*",
+    "supabase.*",
+    "storage3.*",
+    "postgrest.*",
+    "redis.*",
+    "jwt.*",
+    "fitz.*",
+    "docx.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -2,17 +2,14 @@
 
 Endpoints:
 - GET /health  (Liveness probe: fast, lightweight, no DB calls)
-- GET /ready   (Readiness probe: checks PostgreSQL, Redis, MinIO/S3, returns 200 or 503)
+- GET /ready   (Readiness probe: checks PostgreSQL, Redis, Supabase Storage, returns 200 or 503)
 - GET /api/v1/health (Legacy M1-M5 status check endpoint)
 - GET /api/v1/ready
 """
 
 import asyncio
-from typing import Any
 
-import boto3
 import redis.asyncio as aioredis
-from botocore.exceptions import ClientError
 from fastapi import APIRouter, Query, status
 from fastapi.responses import JSONResponse
 
@@ -38,29 +35,16 @@ async def _check_redis() -> bool:
 
 
 async def _check_storage() -> bool:
-    """Head the MinIO/S3 bucket. Returns True on success."""
+    """Check Supabase Storage bucket connectivity. Returns True on success."""
     settings = get_settings()
     try:
-        client_kwargs: dict[str, Any] = {
-            "aws_access_key_id": settings.MINIO_ACCESS_KEY,
-            "aws_secret_access_key": settings.MINIO_SECRET_KEY,
-            "region_name": settings.AWS_REGION,
-            "use_ssl": settings.MINIO_USE_SSL,
-        }
-        if settings.MINIO_ENDPOINT:
-            client_kwargs["endpoint_url"] = settings.MINIO_ENDPOINT
+        from app.services.storage_service import _get_supabase_client
 
-        client = boto3.client("s3", **client_kwargs)
-        client.head_bucket(Bucket=settings.MINIO_BUCKET_NAME)
+        client = _get_supabase_client()
+        client.storage.get_bucket(settings.SUPABASE_STORAGE_BUCKET)
         return True
-    except ClientError as exc:
-        error_code = exc.response["Error"]["Code"]
-        if error_code == "404":
-            return True
-        logger.warning("Storage health check failed", exc_info=exc)
-        return False
     except Exception as exc:
-        logger.warning("Storage health check failed", exc_info=exc)
+        logger.warning("Supabase storage health check failed", exc_info=exc)
         return False
 
 
@@ -98,7 +82,9 @@ async def liveness_check() -> JSONResponse:
 @router.get(
     "/ready",
     summary="Readiness probe",
-    description="Verifies PostgreSQL, Redis, and MinIO storage connectivity. Returns 200 or 503.",
+    description=(
+        "Verifies PostgreSQL, Redis, and Supabase storage connectivity. Returns 200 or 503."
+    ),
 )
 async def readiness_check(
     include_workers: bool = Query(

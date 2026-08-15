@@ -20,14 +20,14 @@ ContractIQ is an enterprise-grade, multi-tenant AI contract risk analyzer and re
 |  └── WebSocket Realtime Manager (Redis Pub/Sub Subscription)            |
 +-------------------------------------------------------------------------+
        |                                   |                    |
-       | Dispatches Celery Tasks           | S3/MinIO API       | Publishes Events
+       | Dispatches Celery Tasks           | Supabase API       | Publishes Events
        v                                   v                    v
-+-----------------------+         +------------------+  +---------------+
-| Celery Workers        |         | MinIO / AWS S3   |  | Redis 7       |
-|  ├── Text Extraction  |         | (Raw PDFs, DOCX, |  |  ├── Tasks    |
-|  ├── Chunking & Embed |         |  Generated PDF   |  |  ├── Cache    |
-|  ├── Risk Analysis    |         |  Report Artifacts|  |  └── Pub/Sub  |
-|  └── PDF Generation   |         +------------------+  +---------------+
++-----------------------+         +--------------------+ +---------------+
+| Celery Workers        |         | Supabase Storage   | | Redis 7       |
+|  ├── Text Extraction  |         | (Raw PDFs, DOCX,   | |  ├── Tasks    |
+|  ├── Chunking & Embed |         |  Generated PDF     | |  ├── Cache    |
+|  ├── Risk Analysis    |         |  Report Artifacts) | |  └── Pub/Sub  |
+|  └── PDF Generation   |         +--------------------+ +---------------+
 +-----------------------+                   |
        |                                   |
        v (Database Queries via app_user)   |

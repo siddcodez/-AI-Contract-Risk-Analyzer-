@@ -426,12 +426,14 @@ class TestDetailsEndpoint:
 
 
 class TestStorageService:
-    @patch("app.services.storage_service._get_s3_client")
-    def test_upload_file_calls_s3(self, mock_client_factory: MagicMock) -> None:
-        """upload_file should call upload_fileobj on the S3 client."""
+    @patch("app.services.storage_service._get_supabase_client")
+    def test_upload_file_calls_supabase(self, mock_client_factory: MagicMock) -> None:
+        """upload_file should call bucket.upload on the Supabase storage bucket."""
         from app.services import storage_service
 
         mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
         mock_client_factory.return_value = mock_client
 
         result = storage_service.upload_file(
@@ -441,30 +443,92 @@ class TestStorageService:
         )
 
         assert result == "org/contract/file.txt"
-        mock_client.upload_fileobj.assert_called_once()
+        mock_client.storage.from_.assert_called_with("contract-documents")
+        mock_bucket.upload.assert_called_once_with(
+            path="org/contract/file.txt",
+            file=b"test data",
+            file_options={"content-type": "text/plain", "upsert": "true"},
+        )
 
-    @patch("app.services.storage_service._get_s3_client")
-    def test_delete_file_calls_s3(self, mock_client_factory: MagicMock) -> None:
-        """delete_file should call delete_object on the S3 client."""
+    @patch("app.services.storage_service._get_supabase_client")
+    def test_download_file_calls_supabase(self, mock_client_factory: MagicMock) -> None:
+        """download_file should call bucket.download on the Supabase storage bucket."""
         from app.services import storage_service
 
         mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.download.return_value = b"downloaded contract bytes"
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_client_factory.return_value = mock_client
+
+        data = storage_service.download_file("org/contract/file.txt")
+
+        assert data == b"downloaded contract bytes"
+        mock_bucket.download.assert_called_once_with(path="org/contract/file.txt")
+
+    @patch("app.services.storage_service._get_supabase_client")
+    def test_delete_file_calls_supabase(self, mock_client_factory: MagicMock) -> None:
+        """delete_file should call bucket.remove on the Supabase storage bucket."""
+        from app.services import storage_service
+
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
         mock_client_factory.return_value = mock_client
 
         storage_service.delete_file("org/contract/file.txt")
 
-        mock_client.delete_object.assert_called_once()
+        mock_bucket.remove.assert_called_once_with(["org/contract/file.txt"])
 
-    @patch("app.services.storage_service._get_s3_client")
+    @patch("app.services.storage_service._get_supabase_client")
     def test_generate_presigned_url(self, mock_client_factory: MagicMock) -> None:
-        """generate_presigned_url should return a URL string."""
+        """generate_presigned_url should return a signed URL string."""
         from app.services import storage_service
 
         mock_client = MagicMock()
-        mock_client.generate_presigned_url.return_value = "https://minio.local/signed-url"
+        mock_bucket = MagicMock()
+        mock_bucket.create_signed_url.return_value = {
+            "signedURL": "https://xyz.supabase.co/storage/v1/object/sign/contract-documents/org/contract/file.txt?token=xxx"
+        }
+        mock_client.storage.from_.return_value = mock_bucket
         mock_client_factory.return_value = mock_client
 
         url = storage_service.generate_presigned_url("org/contract/file.txt")
 
-        assert url == "https://minio.local/signed-url"
-        mock_client.generate_presigned_url.assert_called_once()
+        assert "https://xyz.supabase.co/storage/v1/object/sign" in url
+        mock_bucket.create_signed_url.assert_called_once_with(
+            path="org/contract/file.txt", expires_in=3600
+        )
+
+    @patch("app.services.storage_service._get_supabase_client")
+    def test_exists(self, mock_client_factory: MagicMock) -> None:
+        """exists should return True when object exists in bucket."""
+        from app.services import storage_service
+
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.exists.return_value = True
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_client_factory.return_value = mock_client
+
+        assert storage_service.exists("org/contract/file.txt") is True
+        mock_bucket.exists.assert_called_once_with(path="org/contract/file.txt")
+
+    @patch("app.services.storage_service._get_supabase_client")
+    def test_storage_error_handling(self, mock_client_factory: MagicMock) -> None:
+        """Storage operations should raise app StorageError on failure."""
+        from app.core.exceptions import StorageError
+        from app.services import storage_service
+
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.upload.side_effect = RuntimeError("Supabase connection error")
+        mock_bucket.download.side_effect = RuntimeError("Supabase download error")
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_client_factory.return_value = mock_client
+
+        with pytest.raises(StorageError):
+            storage_service.upload_file(file_data=b"data", key="k", content_type="text/plain")
+
+        with pytest.raises(StorageError):
+            storage_service.download_file("k")

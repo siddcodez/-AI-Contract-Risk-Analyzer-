@@ -1,21 +1,13 @@
-"""Object storage service for MinIO / S3.
+"""Object storage service for Supabase Storage.
 
-Provides a thin wrapper over boto3 for uploading, downloading, and
-deleting contract files.  Uses the same connection settings as the
-main application (MINIO_ENDPOINT, MINIO_ACCESS_KEY, etc.).
-
-The service uses synchronous boto3 calls because:
-1. Upload is called from async endpoints via run_in_executor or
-   directly (boto3 calls are fast for MinIO on localhost).
-2. Keeping it synchronous avoids the complexity of aiobotocore
-   session management for simple put/get/delete operations.
+Provides an abstraction for uploading, downloading, deleting, and generating
+signed download URLs for contract documents using the official Supabase client.
 """
 
-import io
-from typing import Any
+from typing import cast
 
-import boto3
-from botocore.exceptions import ClientError
+from storage3.types import FileOptions
+from supabase import Client, create_client
 
 from app.core.config import get_settings
 from app.core.exceptions import StorageError
@@ -23,20 +15,19 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+_supabase_client: Client | None = None
 
-def _get_s3_client() -> Any:
-    """Create a boto3 S3 client configured for MinIO or native AWS S3."""
-    settings = get_settings()
-    client_kwargs: dict[str, Any] = {
-        "aws_access_key_id": settings.MINIO_ACCESS_KEY,
-        "aws_secret_access_key": settings.MINIO_SECRET_KEY,
-        "region_name": settings.AWS_REGION,
-        "use_ssl": settings.MINIO_USE_SSL,
-    }
-    if settings.MINIO_ENDPOINT:
-        client_kwargs["endpoint_url"] = settings.MINIO_ENDPOINT
 
-    return boto3.client("s3", **client_kwargs)
+def _get_supabase_client() -> Client:
+    """Create or return the cached Supabase client for storage operations."""
+    global _supabase_client
+    if _supabase_client is None:
+        settings = get_settings()
+        _supabase_client = create_client(
+            settings.SUPABASE_URL,
+            settings.SUPABASE_SERVICE_ROLE_KEY,
+        )
+    return _supabase_client
 
 
 def upload_file(
@@ -45,7 +36,7 @@ def upload_file(
     key: str,
     content_type: str,
 ) -> str:
-    """Upload a file to object storage.
+    """Upload a file to Supabase Storage.
 
     Args:
         file_data: Raw file bytes.
@@ -60,16 +51,23 @@ def upload_file(
     """
     settings = get_settings()
     try:
-        client = _get_s3_client()
-        client.upload_fileobj(
-            Fileobj=io.BytesIO(file_data),
-            Bucket=settings.MINIO_BUCKET_NAME,
-            Key=key,
-            ExtraArgs={"ContentType": content_type},
+        client = _get_supabase_client()
+        bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        file_options = cast(
+            FileOptions,
+            {
+                "content-type": content_type,
+                "upsert": "true",
+            },
         )
-        logger.info("File uploaded to storage", key=key, size=len(file_data))
+        bucket.upload(
+            path=key,
+            file=file_data,
+            file_options=file_options,
+        )
+        logger.info("File uploaded to Supabase storage", key=key, size=len(file_data))
         return key
-    except ClientError as exc:
+    except Exception as exc:
         logger.error("Storage upload failed", key=key, exc_info=exc)
         raise StorageError(
             "Failed to upload file to storage",
@@ -78,29 +76,53 @@ def upload_file(
 
 
 def generate_presigned_url(key: str, expires_in: int = 3600) -> str:
-    """Generate a presigned URL for downloading a file.
+    """Generate a presigned/signed URL for downloading a private file.
 
     Args:
         key: The object key in the bucket.
         expires_in: URL validity in seconds (default: 1 hour).
 
     Returns:
-        A presigned URL string.
+        A signed URL string.
 
     Raises:
         StorageError: If URL generation fails.
     """
     settings = get_settings()
     try:
-        client = _get_s3_client()
-        url: str = client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": settings.MINIO_BUCKET_NAME, "Key": key},
-            ExpiresIn=expires_in,
-        )
-        return url
-    except ClientError as exc:
-        logger.error("Presigned URL generation failed", key=key, exc_info=exc)
+        client = _get_supabase_client()
+        bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        res = bucket.create_signed_url(path=key, expires_in=expires_in)
+
+        # Handle both dict response and object response formats
+        signed_url: str | None = None
+        if isinstance(res, dict):
+            raw_url = (
+                res.get("signedURL")
+                or res.get("signedUrl")
+                or res.get("signed_url")
+                or res.get("url")
+            )
+            if isinstance(raw_url, str):
+                signed_url = raw_url
+        elif hasattr(res, "signedURL"):
+            raw_val = getattr(res, "signedURL", None)
+            if isinstance(raw_val, str):
+                signed_url = raw_val
+        elif hasattr(res, "signedUrl"):
+            raw_val = getattr(res, "signedUrl", None)
+            if isinstance(raw_val, str):
+                signed_url = raw_val
+
+        if not signed_url and isinstance(res, str):
+            signed_url = res
+
+        if not signed_url:
+            signed_url = str(res)
+
+        return signed_url
+    except Exception as exc:
+        logger.error("Signed URL generation failed", key=key, exc_info=exc)
         raise StorageError(
             "Failed to generate download URL",
             details={"key": key},
@@ -108,7 +130,7 @@ def generate_presigned_url(key: str, expires_in: int = 3600) -> str:
 
 
 def delete_file(key: str) -> None:
-    """Delete a file from object storage.
+    """Delete a file from Supabase Storage.
 
     Args:
         key: The object key to delete.
@@ -118,13 +140,11 @@ def delete_file(key: str) -> None:
     """
     settings = get_settings()
     try:
-        client = _get_s3_client()
-        client.delete_object(
-            Bucket=settings.MINIO_BUCKET_NAME,
-            Key=key,
-        )
-        logger.info("File deleted from storage", key=key)
-    except ClientError as exc:
+        client = _get_supabase_client()
+        bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        bucket.remove([key])
+        logger.info("File deleted from Supabase storage", key=key)
+    except Exception as exc:
         logger.error("Storage deletion failed", key=key, exc_info=exc)
         raise StorageError(
             "Failed to delete file from storage",
@@ -133,7 +153,7 @@ def delete_file(key: str) -> None:
 
 
 def download_file(key: str) -> bytes:
-    """Download file bytes from object storage.
+    """Download file bytes from Supabase Storage.
 
     Args:
         key: The object key in the bucket.
@@ -146,17 +166,33 @@ def download_file(key: str) -> bytes:
     """
     settings = get_settings()
     try:
-        client = _get_s3_client()
-        response = client.get_object(
-            Bucket=settings.MINIO_BUCKET_NAME,
-            Key=key,
-        )
-        data: bytes = response["Body"].read()
-        logger.info("Downloaded file from storage", key=key, size=len(data))
+        client = _get_supabase_client()
+        bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        data: bytes = bucket.download(path=key)
+        logger.info("Downloaded file from Supabase storage", key=key, size=len(data))
         return data
-    except ClientError as exc:
+    except Exception as exc:
         logger.error("Storage download failed", key=key, exc_info=exc)
         raise StorageError(
             "Failed to download file from storage",
             details={"key": key},
         ) from exc
+
+
+def exists(key: str) -> bool:
+    """Check if a file exists in Supabase Storage.
+
+    Args:
+        key: The object key in the bucket.
+
+    Returns:
+        True if file exists, False otherwise.
+    """
+    settings = get_settings()
+    try:
+        client = _get_supabase_client()
+        bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        return bool(bucket.exists(path=key))
+    except Exception as exc:
+        logger.warning("Storage exists check failed", key=key, exc_info=exc)
+        return False

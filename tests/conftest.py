@@ -24,13 +24,9 @@ os.environ.setdefault(
     "postgresql+asyncpg://contract_user:contract_pass@localhost:5432/contract_risk_db",
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/1")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
-os.environ.setdefault("MINIO_ENDPOINT", "http://localhost:9000")
-os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
-os.environ.setdefault("MINIO_SECRET_KEY", "minioadmin")
-os.environ.setdefault("MINIO_BUCKET_NAME", "contract-documents")
-os.environ.setdefault("MINIO_USE_SSL", "False")
+os.environ.setdefault("SUPABASE_URL", "https://test-supabase-project.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-supabase-service-role-key-secret-12345")
+os.environ.setdefault("SUPABASE_STORAGE_BUCKET", "contract-documents")
 os.environ["ENVIRONMENT"] = "development"
 os.environ["RATE_LIMIT_ENABLED"] = "False"
 os.environ.setdefault("LOG_LEVEL", "DEBUG")

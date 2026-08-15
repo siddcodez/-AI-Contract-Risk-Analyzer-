@@ -1,54 +1,49 @@
-"""Script to create required MinIO buckets for local development.
+"""Script to create required Supabase Storage buckets.
 
-Run once after `docker compose up -d`:
+Usage:
     python scripts/create_buckets.py
-
-The ObjectStorageProvider abstraction means real S3 buckets are created
-via Terraform/CDK in prod — this script is dev-only.
 """
 
 import sys
 
-import boto3
 from app.core.config import get_settings
-from botocore.exceptions import ClientError
+from supabase import Client, create_client
 
 
-def create_bucket(client: boto3.client, bucket_name: str) -> None:  # type: ignore[type-arg]
-    """Create a bucket if it does not already exist."""
+def create_bucket_if_missing(client: Client, bucket_name: str) -> None:
+    """Create a Supabase storage bucket if it does not already exist."""
     try:
-        client.head_bucket(Bucket=bucket_name)
+        client.storage.get_bucket(bucket_name)
         print(f"  [OK] Bucket already exists: {bucket_name}")
-    except ClientError as exc:
-        error_code = exc.response["Error"]["Code"]
-        if error_code in ("404", "NoSuchBucket"):
-            client.create_bucket(Bucket=bucket_name)
+    except Exception:
+        try:
+            client.storage.create_bucket(bucket_name, options={"public": False})
             print(f"  [OK] Created bucket: {bucket_name}")
-        else:
-            print(f"  [ERROR] Unexpected error for bucket {bucket_name}: {exc}", file=sys.stderr)
+        except Exception as exc:
+            print(
+                f"  [ERROR] Failed to ensure bucket '{bucket_name}': {exc}",
+                file=sys.stderr,
+            )
             raise
 
 
 def main() -> None:
     settings = get_settings()
 
-    print(f"Connecting to object storage at {settings.MINIO_ENDPOINT} …")
+    print(f"Connecting to Supabase Storage at {settings.SUPABASE_URL} …")
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=settings.MINIO_ENDPOINT,
-        aws_access_key_id=settings.MINIO_ACCESS_KEY,
-        aws_secret_access_key=settings.MINIO_SECRET_KEY,
-        region_name="us-east-1",  # MinIO accepts any region string
+    client: Client = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SERVICE_ROLE_KEY,
     )
 
     buckets = [
-        settings.MINIO_BUCKET_NAME,
+        settings.SUPABASE_STORAGE_BUCKET,
     ]
 
     print("Ensuring buckets exist …")
     for bucket in buckets:
-        create_bucket(client, bucket)
+        create_bucket_if_missing(client, bucket)
 
     print("Done.")
 
