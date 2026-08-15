@@ -5,7 +5,9 @@ from app.core.config import Settings
 from pydantic import ValidationError
 
 
-def test_development_config_valid() -> None:
+def test_development_config_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
+    monkeypatch.delenv("CELERY_RESULT_BACKEND", raising=False)
     settings = Settings(
         _env_file=None,
         ENVIRONMENT="development",
@@ -49,7 +51,9 @@ def test_database_url_normalization() -> None:
     assert "neon_user:neon_pass" in settings.DATABASE_URL
 
 
-def test_celery_defaults_to_redis_url() -> None:
+def test_celery_defaults_to_redis_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
+    monkeypatch.delenv("CELERY_RESULT_BACKEND", raising=False)
     settings = Settings(
         _env_file=None,
         ENVIRONMENT="development",

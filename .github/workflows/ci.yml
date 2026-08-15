@@ -94,33 +94,14 @@ jobs:
           --health-timeout 3s
           --health-retries 10
 
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        command: server /data --console-address ":9001"
-        ports:
-          - 9000:9000
-          - 9001:9001
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
       DATABASE_URL: postgresql+asyncpg://app_user:app_pass@localhost:5432/contract_risk_db
       MIGRATION_DATABASE_URL: postgresql+asyncpg://contract_user:contract_pass@localhost:5432/contract_risk_db
       REDIS_URL: redis://localhost:6379/0
-      CELERY_BROKER_URL: redis://localhost:6379/1
-      CELERY_RESULT_BACKEND: redis://localhost:6379/2
 
-      MINIO_ENDPOINT: http://localhost:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET_NAME: contract-documents
-      MINIO_USE_SSL: "False"
+      SUPABASE_URL: https://ci-mock-project.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ci-mock-supabase-service-role-key-12345
+      SUPABASE_STORAGE_BUCKET: contract-documents
 
       SECRET_KEY: ci-test-secret-key-not-for-production-x
       ENVIRONMENT: development
