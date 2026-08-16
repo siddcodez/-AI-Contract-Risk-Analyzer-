@@ -41,16 +41,8 @@ def get_url() -> str:
     Prefers MIGRATION_DATABASE_URL (elevated privileges for schema changes)
     and falls back to DATABASE_URL (app runtime connection).
     """
-    migration_url = os.environ.get("MIGRATION_DATABASE_URL")
-    if migration_url:
-        if migration_url.startswith("postgres://"):
-            migration_url = migration_url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif migration_url.startswith("postgresql://") and not migration_url.startswith("postgresql+asyncpg://"):
-            migration_url = migration_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        if "sslmode=" in migration_url:
-            migration_url = migration_url.replace("sslmode=", "ssl=")
-        return migration_url
-    return get_settings().DATABASE_URL
+    settings = get_settings()
+    return settings.MIGRATION_DATABASE_URL or settings.DATABASE_URL
 
 
 def run_migrations_offline() -> None:

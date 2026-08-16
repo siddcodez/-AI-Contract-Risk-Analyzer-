@@ -9,6 +9,7 @@ Usage:
     settings = get_settings()
 """
 
+import urllib.parse
 from functools import lru_cache
 from typing import Literal
 
@@ -169,8 +170,20 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-            if "sslmode=" in v:
-                v = v.replace("sslmode=", "ssl=")
+            parsed = urllib.parse.urlsplit(v)
+            if parsed.query:
+                params = urllib.parse.parse_qs(parsed.query)
+                needs_ssl = False
+                if "sslmode" in params:
+                    sslmode = params["sslmode"][0]
+                    if sslmode in ("require", "verify-ca", "verify-full", "prefer"):
+                        needs_ssl = True
+                if "ssl" in params:
+                    needs_ssl = True
+                new_query = "ssl=require" if needs_ssl else ""
+                v = urllib.parse.urlunsplit(
+                    (parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment)
+                )
         if not isinstance(v, str) or not v.startswith("postgresql+asyncpg://"):
             raise ValueError(
                 "DATABASE_URL must use the postgresql+asyncpg:// scheme for async support"
@@ -185,8 +198,20 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-            if "sslmode=" in v:
-                v = v.replace("sslmode=", "ssl=")
+            parsed = urllib.parse.urlsplit(v)
+            if parsed.query:
+                params = urllib.parse.parse_qs(parsed.query)
+                needs_ssl = False
+                if "sslmode" in params:
+                    sslmode = params["sslmode"][0]
+                    if sslmode in ("require", "verify-ca", "verify-full", "prefer"):
+                        needs_ssl = True
+                if "ssl" in params:
+                    needs_ssl = True
+                new_query = "ssl=require" if needs_ssl else ""
+                v = urllib.parse.urlunsplit(
+                    (parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment)
+                )
         return v
 
     @model_validator(mode="after")
