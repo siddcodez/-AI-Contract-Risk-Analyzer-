@@ -43,6 +43,12 @@ def get_url() -> str:
     """
     migration_url = os.environ.get("MIGRATION_DATABASE_URL")
     if migration_url:
+        if migration_url.startswith("postgres://"):
+            migration_url = migration_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif migration_url.startswith("postgresql://") and not migration_url.startswith("postgresql+asyncpg://"):
+            migration_url = migration_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if "sslmode=" in migration_url:
+            migration_url = migration_url.replace("sslmode=", "ssl=")
         return migration_url
     return get_settings().DATABASE_URL
 

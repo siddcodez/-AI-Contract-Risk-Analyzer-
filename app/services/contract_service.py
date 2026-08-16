@@ -84,6 +84,7 @@ async def upload_contract(
     # 3. Create Contract record
     contract = await contract_repo.create(
         session,
+        contract_id=contract_id,
         title=display_title,
         file_name=validated.sanitized_name,
         file_size=validated.file_size,
@@ -92,8 +93,6 @@ async def upload_contract(
         org_id=user.org_id,
         uploaded_by=user.id,
     )
-    # Use the repo-generated ID
-    contract_id = contract.id
 
     # 4. Create ContractVersion (version 1)
     await contract_version_repo.create(

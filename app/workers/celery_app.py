@@ -11,16 +11,27 @@ Design decisions:
 - Soft/hard time limits: conservative defaults, overridden per task where needed.
 """
 
+import ssl
+
 from celery import Celery
 
 from app.core.config import get_settings
 
 settings = get_settings()
 
+broker_url = settings.CELERY_BROKER_URL or settings.REDIS_URL
+backend_url = settings.CELERY_RESULT_BACKEND or settings.REDIS_URL
+
+ssl_conf: dict[str, object] = {}
+if broker_url and broker_url.startswith("rediss://"):
+    ssl_conf["broker_use_ssl"] = {"ssl_cert_reqs": ssl.CERT_NONE}
+if backend_url and backend_url.startswith("rediss://"):
+    ssl_conf["redis_backend_use_ssl"] = {"ssl_cert_reqs": ssl.CERT_NONE}
+
 celery_app = Celery(
     "contract_risk",
-    broker=settings.CELERY_BROKER_URL or settings.REDIS_URL,
-    backend=settings.CELERY_RESULT_BACKEND or settings.REDIS_URL,
+    broker=broker_url,
+    backend=backend_url,
     include=[
         "app.workers.tasks",
     ],
@@ -34,6 +45,7 @@ celery_app.conf.update(
     # Timezone
     timezone="UTC",
     enable_utc=True,
+    task_ignore_result=True,
     # Tracking
     task_track_started=True,
     # Time limits (seconds) — tasks should override if they need more
@@ -46,4 +58,5 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     # Worker settings
     worker_prefetch_multiplier=1,  # one task at a time per worker process (LLM tasks are heavy)
+    **ssl_conf,
 )

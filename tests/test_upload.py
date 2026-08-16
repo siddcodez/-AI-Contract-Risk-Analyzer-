@@ -443,7 +443,9 @@ class TestStorageService:
         )
 
         assert result == "org/contract/file.txt"
-        mock_client.storage.from_.assert_called_with("contract-documents")
+        mock_client.storage.from_.assert_called_with(
+            storage_service.get_settings().SUPABASE_STORAGE_BUCKET
+        )
         mock_bucket.upload.assert_called_once_with(
             path="org/contract/file.txt",
             file=b"test data",

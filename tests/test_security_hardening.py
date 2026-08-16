@@ -82,7 +82,12 @@ async def test_all_tenant_scoped_tables_enforce_force_row_level_security() -> No
     from sqlalchemy.ext.asyncio import create_async_engine
 
     settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        pytest.skip("PostgreSQL not available")
 
     async with engine.connect() as conn:
         res = await conn.execute(

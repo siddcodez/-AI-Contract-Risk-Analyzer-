@@ -102,6 +102,10 @@ def test_websocket_connection_accepted_and_pings() -> None:
             new=AsyncMock(return_value=user),
         ),
         patch(
+            "app.api.v1.websocket.set_tenant_context",
+            new_callable=AsyncMock,
+        ),
+        patch(
             "app.repositories.contract_repo.get_by_id",
             new=AsyncMock(return_value=contract),
         ),

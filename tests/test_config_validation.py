@@ -8,6 +8,7 @@ from pydantic import ValidationError
 def test_development_config_valid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
     monkeypatch.delenv("CELERY_RESULT_BACKEND", raising=False)
+    monkeypatch.delenv("SUPABASE_STORAGE_BUCKET", raising=False)
     settings = Settings(
         _env_file=None,
         ENVIRONMENT="development",

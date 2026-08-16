@@ -40,15 +40,26 @@ class Settings(BaseSettings):
 
     # ---- PostgreSQL ---------------------------------------------------------
     DATABASE_URL: str = Field(
-        description="Async SQLAlchemy URL: postgresql+asyncpg://user:pass@host:port/db"
+        validation_alias=AliasChoices("DATABASE_URL", "NEON_DATABASE_URL"),
+        description="Async SQLAlchemy URL: postgresql+asyncpg://user:pass@host:port/db",
     )
     MIGRATION_DATABASE_URL: str | None = Field(
         default=None,
+        validation_alias=AliasChoices("MIGRATION_DATABASE_URL", "NEON_MIGRATION_DATABASE_URL"),
         description="Elevated migration connection URL used for background tasks and migrations",
     )
 
     # ---- Redis --------------------------------------------------------------
-    REDIS_URL: str = Field(description="Redis connection URL: redis://host:port/db")
+    REDIS_URL: str = Field(
+        validation_alias=AliasChoices("REDIS_URL", "UPSTASH_REDIS_URL"),
+        description="Redis connection URL: redis://host:port/db (or UPSTASH_REDIS_URL)",
+    )
+
+    # ---- CORS ---------------------------------------------------------------
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
+        description="Allowed CORS origins, comma-separated or *",
+    )
 
     # ---- Supabase Storage ---------------------------------------------------
     SUPABASE_URL: str = Field(description="Supabase project URL (e.g. https://xyz.supabase.co)")
@@ -158,6 +169,8 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            if "sslmode=" in v:
+                v = v.replace("sslmode=", "ssl=")
         if not isinstance(v, str) or not v.startswith("postgresql+asyncpg://"):
             raise ValueError(
                 "DATABASE_URL must use the postgresql+asyncpg:// scheme for async support"
@@ -172,6 +185,8 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            if "sslmode=" in v:
+                v = v.replace("sslmode=", "ssl=")
         return v
 
     @model_validator(mode="after")
@@ -209,6 +224,13 @@ class Settings(BaseSettings):
                     f"'{self.LLM_PROVIDER}'"
                 )
         return self
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Return parsed list of CORS origins."""
+        if not self.CORS_ORIGINS or self.CORS_ORIGINS.strip() == "*":
+            return ["*"]
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
     def is_production(self) -> bool:

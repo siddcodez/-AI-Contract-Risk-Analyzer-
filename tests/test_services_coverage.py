@@ -1,7 +1,7 @@
 """Targeted tests for processing_service and auth_service edge and failure branches."""
 
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
@@ -102,6 +102,7 @@ async def test_process_contract_end_to_end_success_with_broadcast() -> None:
         org_id=job.org_id,
     )
 
+    mock_analysis_job = MagicMock(id=uuid.uuid4())
     with (
         patch(
             "app.repositories.processing_job_repo.get_by_id", new_callable=AsyncMock
@@ -126,6 +127,12 @@ async def test_process_contract_end_to_end_success_with_broadcast() -> None:
             new_callable=AsyncMock,
         ),
         patch("app.repositories.contract_chunk_repo.bulk_create", new_callable=AsyncMock),
+        patch(
+            "app.repositories.analysis_job_repo.create",
+            new_callable=AsyncMock,
+            return_value=mock_analysis_job,
+        ),
+        patch("app.workers.tasks.analyze_contract_job.delay"),
         patch(
             "app.services.websocket_manager.ws_manager.broadcast_event", new_callable=AsyncMock
         ) as mock_bc,

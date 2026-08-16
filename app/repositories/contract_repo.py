@@ -17,6 +17,7 @@ from app.models.contract import Contract, ContractStatus
 async def create(
     session: AsyncSession,
     *,
+    contract_id: uuid.UUID | None = None,
     title: str,
     file_name: str,
     file_size: int,
@@ -32,7 +33,7 @@ async def create(
     target org_id before calling this.
     """
     contract = Contract(
-        id=uuid.uuid4(),
+        id=contract_id or uuid.uuid4(),
         title=title,
         file_name=file_name,
         file_size=file_size,

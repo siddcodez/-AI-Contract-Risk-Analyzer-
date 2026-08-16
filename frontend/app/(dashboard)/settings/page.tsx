@@ -287,7 +287,7 @@ export default function SettingsPage() {
                   <span className="text-on-surface-variant font-semibold block mb-0.5">
                     Object Storage
                   </span>
-                  <span className="font-mono text-on-surface font-bold">MinIO S3</span>
+                  <span className="font-mono text-on-surface font-bold">Supabase Storage</span>
                 </div>
               </div>
             </div>
